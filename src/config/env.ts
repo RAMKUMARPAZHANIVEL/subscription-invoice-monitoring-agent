@@ -9,7 +9,14 @@ const envSchema = z.object({
   GCP_REGION: z.string().optional(),
   INVOICE_CHECK_INTERVAL_CRON: z.string().default('0 */6 * * *'),
   INVOICE_ALERT_WEBHOOK_URL: z.string().url().optional(),
-  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string(),
+  DATABASE_URL: z.string().url(),
+  GMAIL_CLIENT_ID: z.string(),
+  GMAIL_CLIENT_SECRET: z.string(),
+  GMAIL_REFRESH_TOKEN: z.string(),
+  GMAIL_ADMIN_EMAIL: z.string().email(),
+  GCS_BUCKET_NAME: z.string(),
+  ATTACHMENT_STORE_DRIVER: z.enum(['local', 'gcs']).default('gcs'),
 });
 
 export const env = envSchema.parse(process.env);
