@@ -59,7 +59,7 @@ Tests are co-located as `*.test.ts` next to their source file, matching the exis
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T006 Define the `Vendor`, `SourceEmail`, `Invoice`, `Attachment`, and
+- [x] T006 Define the `Vendor`, `SourceEmail`, `Invoice`, `Attachment`, and
       `ProcessingHistoryEntry` models and the `SubscriptionType`, `ExtractionConfidence`,
       `ProcessingOutcome` enums in `prisma/schema.prisma`, per `data-model.md` (depends on T002)
 - [ ] T007 Generate and apply the initial migration with `pnpm prisma migrate dev` (depends on
