@@ -56,6 +56,8 @@ model SourceEmail {
   attachments              Attachment[]
   invoice                  Invoice?
   processingHistoryEntries ProcessingHistoryEntry[]
+
+  @@index([vendorId])
 }
 
 model Attachment {
@@ -70,6 +72,9 @@ model Attachment {
 
   sourceEmail SourceEmail @relation(fields: [sourceEmailId], references: [id])
   invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+
+  @@index([sourceEmailId])
+  @@index([invoiceId])
 }
 
 model Invoice {
@@ -91,6 +96,8 @@ model Invoice {
   vendor                   Vendor                   @relation(fields: [vendorId], references: [id])
   attachments              Attachment[]
   processingHistoryEntries ProcessingHistoryEntry[]
+
+  @@index([vendorId])
 }
 
 model ProcessingHistoryEntry {
@@ -104,4 +111,7 @@ model ProcessingHistoryEntry {
 
   sourceEmail SourceEmail @relation(fields: [sourceEmailId], references: [id])
   invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+
+  @@index([sourceEmailId])
+  @@index([invoiceId])
 }
