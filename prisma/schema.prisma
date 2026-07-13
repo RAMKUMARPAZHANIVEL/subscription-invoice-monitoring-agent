@@ -9,3 +9,99 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum SubscriptionType {
+  FIXED_MONTHLY
+  USAGE_BASED
+  PER_SEAT
+}
+
+enum ExtractionConfidence {
+  HIGH
+  LOW
+}
+
+enum ProcessingOutcome {
+  PROCESSED
+  FAILED
+  SKIPPED_NOT_INVOICE
+  RETRYING
+}
+
+model Vendor {
+  id                      String            @id @default(cuid())
+  name                    String            @unique
+  senderPatterns          String[]
+  subjectPatterns         String[]
+  defaultSubscriptionType SubscriptionType?
+  enabled                 Boolean           @default(true)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  sourceEmails SourceEmail[]
+  invoices     Invoice[]
+}
+
+model SourceEmail {
+  id              String   @id @default(cuid())
+  gmailMessageId  String   @unique
+  vendorId        String?
+  sender          String
+  subject         String
+  receivedAt      DateTime
+  bodyTextExcerpt String?
+  createdAt       DateTime @default(now())
+
+  vendor                   Vendor?                  @relation(fields: [vendorId], references: [id])
+  attachments              Attachment[]
+  invoice                  Invoice?
+  processingHistoryEntries ProcessingHistoryEntry[]
+}
+
+model Attachment {
+  id            String   @id @default(cuid())
+  sourceEmailId String
+  invoiceId     String?
+  filename      String
+  mimeType      String
+  storageRef    String
+  sizeBytes     Int
+  createdAt     DateTime @default(now())
+
+  sourceEmail SourceEmail @relation(fields: [sourceEmailId], references: [id])
+  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+}
+
+model Invoice {
+  id                   String               @id @default(cuid())
+  sourceEmailId        String               @unique
+  vendorId             String
+  amount               Decimal
+  currency             String
+  invoiceDate          DateTime
+  billingPeriodStart   DateTime?
+  billingPeriodEnd     DateTime?
+  subscriptionType     SubscriptionType?
+  lineItems            Json?
+  extractionConfidence ExtractionConfidence
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  sourceEmail              SourceEmail              @relation(fields: [sourceEmailId], references: [id])
+  vendor                   Vendor                   @relation(fields: [vendorId], references: [id])
+  attachments              Attachment[]
+  processingHistoryEntries ProcessingHistoryEntry[]
+}
+
+model ProcessingHistoryEntry {
+  id            String            @id @default(cuid())
+  sourceEmailId String
+  invoiceId     String?
+  outcome       ProcessingOutcome
+  attemptNumber Int               @default(1)
+  errorReason   String?
+  evaluatedAt   DateTime
+
+  sourceEmail SourceEmail @relation(fields: [sourceEmailId], references: [id])
+  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+}
