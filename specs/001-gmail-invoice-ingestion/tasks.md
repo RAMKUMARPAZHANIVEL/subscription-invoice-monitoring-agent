@@ -62,7 +62,7 @@ Tests are co-located as `*.test.ts` next to their source file, matching the exis
 - [x] T006 Define the `Vendor`, `SourceEmail`, `Invoice`, `Attachment`, and
       `ProcessingHistoryEntry` models and the `SubscriptionType`, `ExtractionConfidence`,
       `ProcessingOutcome` enums in `prisma/schema.prisma`, per `data-model.md` (depends on T002)
-- [ ] T007 Generate and apply the initial migration with `pnpm prisma migrate dev` (depends on
+- [x] T007 Generate and apply the initial migration with `pnpm prisma migrate dev` (depends on
       T006)
 - [ ] T008 [P] Create the Prisma client singleton in `src/storage/prisma.ts` (depends on T007)
 - [ ] T009 [P] Define the `AttachmentStore` interface in `src/storage/attachmentStore.ts`
