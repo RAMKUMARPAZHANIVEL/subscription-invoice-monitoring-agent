@@ -1,6 +1,5 @@
 ---
-
-description: "Task list for Gmail Invoice Ingestion & Extraction (Phase 1)"
+description: 'Task list for Gmail Invoice Ingestion & Extraction (Phase 1)'
 ---
 
 # Tasks: Gmail Invoice Ingestion & Extraction (Phase 1)
@@ -47,7 +46,7 @@ Tests are co-located as `*.test.ts` next to their source file, matching the exis
       `GCS_BUCKET_NAME`, `ATTACHMENT_STORE_DRIVER` (`local` \| `gcs`, default `gcs`), and make
       `ANTHROPIC_API_KEY` required (it already exists as optional)
 - [ ] T004 [P] Add the new environment variables (with short comments) to `.env.example`
-- [ ] T005 [P] Document local/test PostgreSQL setup for Vitest integration tests (how
+- [x] T005 [P] Document local/test PostgreSQL setup for Vitest integration tests (how
       `DATABASE_URL` is supplied for `pnpm run test`) in `README.md`
 
 **Checkpoint**: Dependencies installed, configuration schema extended — ready for foundational work.
