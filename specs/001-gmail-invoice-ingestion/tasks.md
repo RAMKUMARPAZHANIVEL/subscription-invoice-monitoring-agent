@@ -66,7 +66,7 @@ Tests are co-located as `*.test.ts` next to their source file, matching the exis
       T006)
 - [x] T008 [P] Create the Prisma client singleton in `src/storage/prisma.ts` (depends on T007)
 - [x] T009 [P] Define the `AttachmentStore` interface in `src/storage/attachmentStore.ts`
-- [ ] T010 [P] Implement `GcsAttachmentStore` in `src/storage/gcsAttachmentStore.ts` (depends on
+- [x] T010 [P] Implement `GcsAttachmentStore` in `src/storage/gcsAttachmentStore.ts` (depends on
       T009)
 - [ ] T011 [P] Implement `LocalAttachmentStore` in `src/storage/localAttachmentStore.ts` (depends
       on T009)
