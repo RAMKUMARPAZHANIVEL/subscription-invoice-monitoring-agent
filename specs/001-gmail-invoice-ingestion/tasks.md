@@ -68,7 +68,7 @@ Tests are co-located as `*.test.ts` next to their source file, matching the exis
 - [x] T009 [P] Define the `AttachmentStore` interface in `src/storage/attachmentStore.ts`
 - [x] T010 [P] Implement `GcsAttachmentStore` in `src/storage/gcsAttachmentStore.ts` (depends on
       T009)
-- [ ] T011 [P] Implement `LocalAttachmentStore` in `src/storage/localAttachmentStore.ts` (depends
+- [x] T011 [P] Implement `LocalAttachmentStore` in `src/storage/localAttachmentStore.ts` (depends
       on T009)
 - [ ] T012 [P] Unit tests for both `AttachmentStore` implementations in
       `src/storage/attachmentStore.test.ts` (depends on T010, T011)

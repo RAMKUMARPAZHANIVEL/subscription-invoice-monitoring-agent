@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 /src/generated/prisma
+.data/
 *.log
 .env
 .env.*.local

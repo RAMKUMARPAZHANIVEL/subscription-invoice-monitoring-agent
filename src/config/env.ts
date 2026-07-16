@@ -17,6 +17,7 @@ const envSchema = z.object({
   GMAIL_ADMIN_EMAIL: z.string().email(),
   GCS_BUCKET_NAME: z.string(),
   ATTACHMENT_STORE_DRIVER: z.enum(['local', 'gcs']).default('gcs'),
+  ATTACHMENT_STORE_LOCAL_DIR: z.string().default('.data/attachments'),
 });
 
 export const env = envSchema.parse(process.env);
