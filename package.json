@@ -61,5 +61,10 @@
     "*.{ts,js,mjs,cjs,json,md,yml,yaml}": [
       "prettier --write"
     ]
+  },
+  "pnpm": {
+    "overrides": {
+      "googleapis-common>google-auth-library": "^10.9.0"
+    }
   }
 }
