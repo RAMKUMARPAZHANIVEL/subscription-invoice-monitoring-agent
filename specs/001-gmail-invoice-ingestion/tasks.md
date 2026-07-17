@@ -120,7 +120,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
 - [x] T027 [US1] Rewrite `runInvoiceCheck` as the ingestion orchestrator (discover → download →
       extract → persist `SourceEmail`/`Invoice`/`Attachment`) in `src/agent/invoiceMonitor.ts`
       (depends on T022, T025, T026, T008)
-- [ ] T028 [US1] Add the `POST /tasks/ingest-invoices` route in `src/server.ts` (depends on T027)
+- [x] T028 [US1] Add the `POST /tasks/ingest-invoices` route in `src/server.ts` (depends on T027)
 - [ ] T029 [US1] Add `GET /invoices` and `GET /invoices/:id` routes per `contracts/http-api.md` in
       `src/server.ts` (depends on T027)
 

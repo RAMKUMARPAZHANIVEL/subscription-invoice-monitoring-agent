@@ -22,6 +22,24 @@ export function createServer(): Express {
     }
   });
 
+  app.post('/tasks/ingest-invoices', async (_req: Request, res: Response) => {
+    logger.info('Received invoice ingestion trigger request');
+    try {
+      const summary = await runInvoiceCheck();
+      res.status(200).json({
+        startedAt: summary.startedAt,
+        finishedAt: summary.finishedAt,
+        durationMs: summary.durationMs,
+        emailsScanned: summary.emailsScanned,
+        invoicesProcessed: summary.invoicesProcessed,
+        failures: summary.failures,
+      });
+    } catch (error) {
+      logger.error({ error }, 'Invoice ingestion run failed');
+      res.status(500).json({ status: 'error' });
+    }
+  });
+
   return app;
 }
 
