@@ -96,7 +96,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
       `src/agent/vendors/vendorConfig.test.ts`
 - [x] T016 [P] [US1] Unit tests for vendor-driven Gmail query building in
       `src/agent/gmail/discovery.test.ts`
-- [ ] T017 [P] [US1] Unit tests for PDF text extraction in
+- [x] T017 [P] [US1] Unit tests for PDF text extraction in
       `src/agent/extraction/pdfExtractor.test.ts`
 - [ ] T018 [P] [US1] Unit tests for CSV parsing in `src/agent/extraction/csvExtractor.test.ts`
 - [ ] T019 [P] [US1] Unit tests for Claude extraction output validation, including a malformed/
@@ -111,7 +111,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
       `src/agent/vendors/vendorConfig.ts` (depends on T008)
 - [x] T022 [US1] Implement vendor-driven Gmail query building and candidate email discovery in
       `src/agent/gmail/discovery.ts` (depends on T013, T021)
-- [ ] T023 [P] [US1] Implement PDF text extraction in `src/agent/extraction/pdfExtractor.ts`
+- [x] T023 [P] [US1] Implement PDF text extraction in `src/agent/extraction/pdfExtractor.ts`
 - [ ] T024 [P] [US1] Implement CSV parsing in `src/agent/extraction/csvExtractor.ts`
 - [ ] T025 [US1] Implement Claude-based structured extraction (tool-use call with a Zod-validated
       response) in `src/agent/extraction/aiExtractor.ts` (depends on T023, T024)
