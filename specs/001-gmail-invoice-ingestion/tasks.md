@@ -94,7 +94,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
 
 - [x] T015 [P] [US1] Unit tests for vendor sender/subject matching in
       `src/agent/vendors/vendorConfig.test.ts`
-- [ ] T016 [P] [US1] Unit tests for vendor-driven Gmail query building in
+- [x] T016 [P] [US1] Unit tests for vendor-driven Gmail query building in
       `src/agent/gmail/discovery.test.ts`
 - [ ] T017 [P] [US1] Unit tests for PDF text extraction in
       `src/agent/extraction/pdfExtractor.test.ts`
@@ -109,7 +109,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
 
 - [x] T021 [P] [US1] Implement the vendor config loader (read enabled `Vendor` rows) in
       `src/agent/vendors/vendorConfig.ts` (depends on T008)
-- [ ] T022 [US1] Implement vendor-driven Gmail query building and candidate email discovery in
+- [x] T022 [US1] Implement vendor-driven Gmail query building and candidate email discovery in
       `src/agent/gmail/discovery.ts` (depends on T013, T021)
 - [ ] T023 [P] [US1] Implement PDF text extraction in `src/agent/extraction/pdfExtractor.ts`
 - [ ] T024 [P] [US1] Implement CSV parsing in `src/agent/extraction/csvExtractor.ts`
