@@ -117,7 +117,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
       response) in `src/agent/extraction/aiExtractor.ts` (depends on T023, T024)
 - [x] T026 [US1] Implement attachment download and storage via `AttachmentStore` in
       `src/agent/gmail/attachments.ts` (depends on T010, T011, T013)
-- [ ] T027 [US1] Rewrite `runInvoiceCheck` as the ingestion orchestrator (discover → download →
+- [x] T027 [US1] Rewrite `runInvoiceCheck` as the ingestion orchestrator (discover → download →
       extract → persist `SourceEmail`/`Invoice`/`Attachment`) in `src/agent/invoiceMonitor.ts`
       (depends on T022, T025, T026, T008)
 - [ ] T028 [US1] Add the `POST /tasks/ingest-invoices` route in `src/server.ts` (depends on T027)
