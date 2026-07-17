@@ -98,7 +98,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
       `src/agent/gmail/discovery.test.ts`
 - [x] T017 [P] [US1] Unit tests for PDF text extraction in
       `src/agent/extraction/pdfExtractor.test.ts`
-- [ ] T018 [P] [US1] Unit tests for CSV parsing in `src/agent/extraction/csvExtractor.test.ts`
+- [x] T018 [P] [US1] Unit tests for CSV parsing in `src/agent/extraction/csvExtractor.test.ts`
 - [ ] T019 [P] [US1] Unit tests for Claude extraction output validation, including a malformed/
       incomplete response, in `src/agent/extraction/aiExtractor.test.ts`
 - [ ] T020 [US1] Integration test: ingesting one fixture invoice email (fake Gmail client + test
@@ -112,7 +112,7 @@ currency, invoice date) and its attachment appear via `GET /invoices` (quickstar
 - [x] T022 [US1] Implement vendor-driven Gmail query building and candidate email discovery in
       `src/agent/gmail/discovery.ts` (depends on T013, T021)
 - [x] T023 [P] [US1] Implement PDF text extraction in `src/agent/extraction/pdfExtractor.ts`
-- [ ] T024 [P] [US1] Implement CSV parsing in `src/agent/extraction/csvExtractor.ts`
+- [x] T024 [P] [US1] Implement CSV parsing in `src/agent/extraction/csvExtractor.ts`
 - [ ] T025 [US1] Implement Claude-based structured extraction (tool-use call with a Zod-validated
       response) in `src/agent/extraction/aiExtractor.ts` (depends on T023, T024)
 - [ ] T026 [US1] Implement attachment download and storage via `AttachmentStore` in
