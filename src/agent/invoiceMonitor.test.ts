@@ -168,6 +168,8 @@ describe('runInvoiceCheck duplicate prevention (integration, real Postgres)', ()
     extractionConfidence: 'HIGH' as const,
   };
 
+  const ATTACHMENT_CSV = 'description,amount\nSeats,49.00\n';
+
   function fakeGmailClient(
     gmailMessageId: string,
   ): Pick<GmailClient, 'listMessages' | 'getMessage' | 'getAttachment'> {
@@ -180,15 +182,28 @@ describe('runInvoiceCheck duplicate prevention (integration, real Postgres)', ()
         threadId: 'thread-1',
         internalDate: String(Date.now()),
         payload: {
-          mimeType: 'text/plain',
+          mimeType: 'multipart/mixed',
           headers: [
             { name: 'From', value: 'billing@testvendor.example' },
             { name: 'Subject', value: 'Your invoice' },
           ],
-          body: { data: Buffer.from('Amount due: $49.00').toString('base64url') },
+          parts: [
+            {
+              mimeType: 'text/plain',
+              body: { data: Buffer.from('Amount due: $49.00').toString('base64url') },
+            },
+            {
+              filename: 'invoice.csv',
+              mimeType: 'text/csv',
+              body: { attachmentId: 'att-1' },
+            },
+          ],
         },
       }),
-      getAttachment: vi.fn(),
+      getAttachment: vi.fn().mockResolvedValue({
+        size: Buffer.byteLength(ATTACHMENT_CSV),
+        data: Buffer.from(ATTACHMENT_CSV).toString('base64url'),
+      }),
     };
   }
 
@@ -232,6 +247,13 @@ describe('runInvoiceCheck duplicate prevention (integration, real Postgres)', ()
 
     const sourceEmails = await prisma.sourceEmail.findMany({ where: { gmailMessageId } });
     expect(sourceEmails).toHaveLength(1);
+
+    const attachments = await prisma.attachment.findMany({
+      where: { sourceEmailId: sourceEmails[0]!.id },
+    });
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0]?.filename).toBe('invoice.csv');
+    expect(attachments[0]?.invoiceId).toBe(invoices[0]!.id);
 
     const history = await prisma.processingHistoryEntry.findMany({
       where: { sourceEmailId: sourceEmails[0]!.id },
