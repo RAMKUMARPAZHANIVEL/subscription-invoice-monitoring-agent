@@ -142,7 +142,7 @@ creates zero new `Invoice` rows and `GET /processing-history` shows an entry for
 
 - [x] T030 [P] [US2] Integration test: re-running ingestion against an already-processed email
       creates no duplicate `Invoice`, in `src/agent/invoiceMonitor.test.ts`
-- [ ] T031 [P] [US2] Unit test: upserting a `SourceEmail` by `gmailMessageId` never creates two
+- [x] T031 [P] [US2] Unit test: upserting a `SourceEmail` by `gmailMessageId` never creates two
       rows for the same ID, in `src/storage/prisma.test.ts`
 
 ### Implementation for User Story 2
