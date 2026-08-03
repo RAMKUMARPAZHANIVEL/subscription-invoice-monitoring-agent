@@ -252,11 +252,15 @@ async function processCandidateEmail(
   candidate: CandidateEmailRef,
   counters: RunCounters,
 ): Promise<void> {
+  const startedAt = Date.now();
+  logger.info({ runId: ctx.runId, gmailMessageId: candidate.id }, 'Processing message');
+
   const message = await ctx.gmailClient.getMessage(candidate.id);
   const sender = getHeader(message.payload, 'From') ?? '';
   const subject = getHeader(message.payload, 'Subject') ?? '';
   const receivedAt = message.internalDate ? new Date(Number(message.internalDate)) : new Date();
   const bodyText = extractBodyText(message.payload);
+  const vendor = findMatchingVendor(ctx.vendors, { sender, subject });
 
   // 4.1 Duplicate detection: an email already tied to an Invoice is fully processed — record the
   // re-evaluation for audit purposes and skip re-doing the work (idempotency, Principle II).
@@ -271,22 +275,27 @@ async function processCandidateEmail(
       data: {
         sourceEmailId: existing.id,
         invoiceId: existing.invoice.id,
-        outcome: 'PROCESSED',
+        outcome: 'SKIPPED_DUPLICATE',
         attemptNumber,
         evaluatedAt: new Date(),
       },
     });
     counters.skipped += 1;
     logger.info(
-      { runId: ctx.runId, gmailMessageId: message.id },
-      'Skipping already-processed email (duplicate)',
+      {
+        runId: ctx.runId,
+        gmailMessageId: message.id,
+        vendor: vendor?.name,
+        invoiceId: existing.invoice.id,
+        durationMs: Date.now() - startedAt,
+      },
+      'Duplicate detected; skipping already-processed email',
     );
     return;
   }
 
   // research.md #9: the SourceEmail row is created before any extraction work, so a crash mid-run
   // can never lead to double-processing on retry.
-  const vendor = findMatchingVendor(ctx.vendors, { sender, subject });
   const sourceEmail = await upsertSourceEmail({
     gmailMessageId: message.id,
     vendorId: vendor?.id,
@@ -381,8 +390,14 @@ async function processCandidateEmail(
     });
     counters.invoicesProcessed += 1;
     logger.info(
-      { runId: ctx.runId, gmailMessageId: message.id, invoiceId: invoice.id },
-      'Processed invoice email',
+      {
+        runId: ctx.runId,
+        gmailMessageId: message.id,
+        vendor: vendor.name,
+        invoiceId: invoice.id,
+        durationMs: Date.now() - startedAt,
+      },
+      'Invoice persisted',
     );
   } catch (err) {
     const errorReason = err instanceof Error ? err.message : String(err);
@@ -397,7 +412,13 @@ async function processCandidateEmail(
     });
     counters.failures += 1;
     logger.error(
-      { runId: ctx.runId, gmailMessageId: message.id, err },
+      {
+        runId: ctx.runId,
+        gmailMessageId: message.id,
+        vendor: vendor.name,
+        durationMs: Date.now() - startedAt,
+        err,
+      },
       'Failed to process invoice email',
     );
   }

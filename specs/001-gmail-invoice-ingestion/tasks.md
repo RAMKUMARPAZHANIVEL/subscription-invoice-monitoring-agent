@@ -140,16 +140,16 @@ creates zero new `Invoice` rows and `GET /processing-history` shows an entry for
 
 ### Tests for User Story 2
 
-- [ ] T030 [P] [US2] Integration test: re-running ingestion against an already-processed email
+- [x] T030 [P] [US2] Integration test: re-running ingestion against an already-processed email
       creates no duplicate `Invoice`, in `src/agent/invoiceMonitor.test.ts`
 - [ ] T031 [P] [US2] Unit test: upserting a `SourceEmail` by `gmailMessageId` never creates two
       rows for the same ID, in `src/storage/prisma.test.ts`
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Implement `SourceEmail` upsert-by-`gmailMessageId` and a `ProcessingHistoryEntry`
-      write for every evaluated email (processed / failed / skipped-as-not-an-invoice) in
-      `src/agent/invoiceMonitor.ts` (depends on T027)
+- [x] T032 [US2] Implement `SourceEmail` upsert-by-`gmailMessageId` and a `ProcessingHistoryEntry`
+      write for every evaluated email (processed / failed / skipped-as-not-an-invoice /
+      skipped-as-duplicate) in `src/agent/invoiceMonitor.ts` (depends on T027)
 - [ ] T033 [US2] Add the `GET /processing-history` route per `contracts/http-api.md` in
       `src/server.ts` (depends on T032)
 

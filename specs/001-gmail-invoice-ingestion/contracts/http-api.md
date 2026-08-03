@@ -38,13 +38,13 @@ Operator-facing list of extracted invoices (FR-015).
 
 **Query parameters** (all optional):
 
-| Param | Type | Meaning |
-|---|---|---|
-| `vendor` | string | Filter by vendor name |
-| `subscriptionType` | `FIXED_MONTHLY` \| `USAGE_BASED` \| `PER_SEAT` | Filter |
-| `from` / `to` | ISO date | Filter by `invoiceDate` range |
-| `limit` | number | Default 50, max 200 |
-| `cursor` | string | Opaque pagination cursor |
+| Param              | Type                                           | Meaning                       |
+| ------------------ | ---------------------------------------------- | ----------------------------- |
+| `vendor`           | string                                         | Filter by vendor name         |
+| `subscriptionType` | `FIXED_MONTHLY` \| `USAGE_BASED` \| `PER_SEAT` | Filter                        |
+| `from` / `to`      | ISO date                                       | Filter by `invoiceDate` range |
+| `limit`            | number                                         | Default 50, max 200           |
+| `cursor`           | string                                         | Opaque pagination cursor      |
 
 **Response `200`**:
 
@@ -92,9 +92,7 @@ Single invoice detail, including its processing history (FR-015, NFR-005).
     "subject": "Your GitHub receipt",
     "receivedAt": "2026-07-01T08:00:00.000Z"
   },
-  "attachments": [
-    { "id": "att_1", "filename": "receipt.pdf", "mimeType": "application/pdf" }
-  ],
+  "attachments": [{ "id": "att_1", "filename": "receipt.pdf", "mimeType": "application/pdf" }],
   "processingHistory": [
     { "outcome": "PROCESSED", "attemptNumber": 1, "evaluatedAt": "2026-07-10T06:00:12.000Z" }
   ]
@@ -108,7 +106,8 @@ Single invoice detail, including its processing history (FR-015, NFR-005).
 Operator-facing view for triaging failures without reading raw logs (FR-008, FR-009, SC-005).
 
 **Query parameters** (all optional): `outcome` (`PROCESSED` \| `FAILED` \| `SKIPPED_NOT_INVOICE` \|
-`RETRYING`), `from` / `to` (ISO date range on `evaluatedAt`), `limit`, `cursor`.
+`SKIPPED_DUPLICATE` \| `RETRYING`), `from` / `to` (ISO date range on `evaluatedAt`), `limit`,
+`cursor`.
 
 **Response `200`**:
 
@@ -117,7 +116,11 @@ Operator-facing view for triaging failures without reading raw logs (FR-008, FR-
   "entries": [
     {
       "id": "ph_789",
-      "sourceEmail": { "gmailMessageId": "18f2b...", "sender": "billing@unknownvendor.com", "subject": "Invoice #492" },
+      "sourceEmail": {
+        "gmailMessageId": "18f2b...",
+        "sender": "billing@unknownvendor.com",
+        "subject": "Invoice #492"
+      },
       "outcome": "FAILED",
       "attemptNumber": 3,
       "errorReason": "PDF text extraction returned empty content (likely a scanned image)",

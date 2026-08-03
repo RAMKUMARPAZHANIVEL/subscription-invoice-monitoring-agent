@@ -30,7 +30,7 @@ vi.mock('../../lib/logger.js', () => ({
 
 vi.mock('./aiExtractor.js', () => {
   class AiExtractionError extends Error {
-    cause?: unknown;
+    override cause?: unknown;
     constructor(message: string, options?: { cause?: unknown }) {
       super(message);
       this.name = 'AiExtractionError';
