@@ -64,58 +64,63 @@ export class AiExtractionError extends Error {
   }
 }
 
+export const EXTRACTION_TOOL_INPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    amount: {
+      type: 'string',
+      description: 'Total invoice amount as a decimal string, e.g. "49.00".',
+    },
+    currency: {
+      type: 'string',
+      description: '3-letter ISO 4217 currency code, e.g. "USD".',
+    },
+    invoiceDate: {
+      type: 'string',
+      description: 'Invoice issue date as an ISO 8601 date (YYYY-MM-DD) or date-time string.',
+    },
+    billingPeriodStart: {
+      type: 'string',
+      description: 'Start of the billing period covered, if stated, as an ISO 8601 date.',
+    },
+    billingPeriodEnd: {
+      type: 'string',
+      description: 'End of the billing period covered, if stated, as an ISO 8601 date.',
+    },
+    subscriptionType: {
+      type: 'string',
+      enum: ['FIXED_MONTHLY', 'USAGE_BASED', 'PER_SEAT'],
+      description: 'The subscription billing model, if determinable from the text.',
+    },
+    lineItems: {
+      type: 'array',
+      description: 'Best-effort itemization of charges, if the source text breaks them out.',
+      items: {
+        type: 'object',
+        properties: {
+          description: { type: 'string' },
+          amount: { type: 'string' },
+        },
+        required: ['description', 'amount'],
+      },
+    },
+    extractionConfidence: {
+      type: 'string',
+      enum: ['HIGH', 'LOW'],
+      description:
+        'HIGH if amount, currency, and invoiceDate were unambiguous in the source text; LOW otherwise.',
+    },
+  },
+  required: ['amount', 'currency', 'invoiceDate', 'extractionConfidence'],
+};
+
 const EXTRACTION_TOOL: Tool = {
   name: TOOL_NAME,
   description:
     'Record the structured invoice fields extracted from the provided vendor billing text.',
   input_schema: {
-    type: 'object',
-    properties: {
-      amount: {
-        type: 'string',
-        description: 'Total invoice amount as a decimal string, e.g. "49.00".',
-      },
-      currency: {
-        type: 'string',
-        description: '3-letter ISO 4217 currency code, e.g. "USD".',
-      },
-      invoiceDate: {
-        type: 'string',
-        description: 'Invoice issue date as an ISO 8601 date (YYYY-MM-DD) or date-time string.',
-      },
-      billingPeriodStart: {
-        type: 'string',
-        description: 'Start of the billing period covered, if stated, as an ISO 8601 date.',
-      },
-      billingPeriodEnd: {
-        type: 'string',
-        description: 'End of the billing period covered, if stated, as an ISO 8601 date.',
-      },
-      subscriptionType: {
-        type: 'string',
-        enum: ['FIXED_MONTHLY', 'USAGE_BASED', 'PER_SEAT'],
-        description: 'The subscription billing model, if determinable from the text.',
-      },
-      lineItems: {
-        type: 'array',
-        description: 'Best-effort itemization of charges, if the source text breaks them out.',
-        items: {
-          type: 'object',
-          properties: {
-            description: { type: 'string' },
-            amount: { type: 'string' },
-          },
-          required: ['description', 'amount'],
-        },
-      },
-      extractionConfidence: {
-        type: 'string',
-        enum: ['HIGH', 'LOW'],
-        description:
-          'HIGH if amount, currency, and invoiceDate were unambiguous in the source text; LOW otherwise.',
-      },
-    },
-    required: ['amount', 'currency', 'invoiceDate', 'extractionConfidence'],
+    ...EXTRACTION_TOOL_INPUT_SCHEMA,
+    type: 'object' as const,
   },
 };
 
@@ -156,7 +161,17 @@ function findToolUseBlock(message: Message): ToolUseBlock | undefined {
 
 let defaultClient: Anthropic | undefined;
 function getDefaultClient(): Anthropic {
-  defaultClient ??= new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  const gatewayUrl = env.GATEWAY_URL ?? 'https://gateway.corevalue.dev';
+  const apiKey = env.COREVALUE_API_KEY ?? env.ANTHROPIC_API_KEY;
+
+  if (!apiKey) {
+    throw new AiExtractionError('A Claude API key is required when using the Claude provider');
+  }
+
+  defaultClient ??= new Anthropic({
+    apiKey,
+    baseURL: gatewayUrl,
+  });
   return defaultClient;
 }
 
@@ -168,15 +183,25 @@ function getDefaultClient(): Anthropic {
  */
 export async function extractInvoiceData(
   input: ExtractInvoiceInput,
-  client: Anthropic = getDefaultClient(),
+  client?: Anthropic,
 ): Promise<ExtractedInvoice> {
+  // A configured GATEWAY_URL means the CoreValue gateway (Anthropic-compatible Messages API
+  // surface) is in front of whichever backend model is configured, so it always takes the
+  // Anthropic SDK path below regardless of INVOICE_EXTRACTION_PROVIDER. Native Bedrock
+  // (Converse API via BedrockRuntimeClient) is only used when calling AWS directly.
+  if (!client && env.INVOICE_EXTRACTION_PROVIDER === 'bedrock') {
+    const { extractInvoiceDataWithBedrock } = await import('./bedrockExtractor.js');
+    return extractInvoiceDataWithBedrock(input);
+  }
+
+  const resolvedClient = client ?? getDefaultClient();
   const messages: MessageParam[] = [{ role: 'user', content: buildPrompt(input) }];
   let lastValidationError: string | undefined;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     let response: Message;
     try {
-      response = await client.messages.create({
+      response = await resolvedClient.messages.create({
         model: MODEL,
         max_tokens: 1024,
         tools: [EXTRACTION_TOOL],

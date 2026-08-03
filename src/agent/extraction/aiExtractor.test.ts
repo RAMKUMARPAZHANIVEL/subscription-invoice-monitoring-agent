@@ -3,8 +3,37 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { Message, MessageCreateParams } from '@anthropic-ai/sdk/resources/messages';
 import { AiExtractionError, extractInvoiceData } from './aiExtractor.js';
 
+const { mockCreate, bedrockExtractFn } = vi.hoisted(() => ({
+  mockCreate: vi.fn(),
+  bedrockExtractFn: vi.fn(),
+}));
+
 vi.mock('../../config/env.js', () => ({
-  env: { NODE_ENV: 'test', LOG_LEVEL: 'silent', ANTHROPIC_API_KEY: 'test-key' },
+  env: {
+    NODE_ENV: 'test',
+    LOG_LEVEL: 'silent',
+    ANTHROPIC_API_KEY: 'test-key',
+    COREVALUE_API_KEY: 'test-key',
+    GATEWAY_URL: 'https://gateway.corevalue.dev',
+    INVOICE_EXTRACTION_PROVIDER: 'bedrock',
+  },
+}));
+
+vi.mock('@anthropic-ai/sdk', async () => {
+  const actual = await vi.importActual('@anthropic-ai/sdk');
+  return {
+    default: Object.assign(
+      vi.fn().mockImplementation(() => ({
+        messages: { create: mockCreate },
+      })),
+      { APIError: actual.APIError },
+    ),
+    APIError: actual.APIError,
+  };
+});
+
+vi.mock('./bedrockExtractor.js', () => ({
+  extractInvoiceDataWithBedrock: bedrockExtractFn,
 }));
 
 function toolUseMessage(input: unknown, id = 'tool_1'): Message {
@@ -69,6 +98,20 @@ const VALID_INPUT = {
 };
 
 describe('extractInvoiceData', () => {
+  it('routes through the Anthropic-compatible gateway when a CoreValue gateway is configured', async () => {
+    mockCreate.mockResolvedValue(toolUseMessage(VALID_INPUT));
+    bedrockExtractFn.mockReset();
+
+    const result = await extractInvoiceData({
+      vendorName: 'Acme Cloud',
+      sourceText: 'Invoice for $49.00 due 2026-06-01',
+    });
+
+    expect(result).toEqual(VALID_INPUT);
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(bedrockExtractFn).not.toHaveBeenCalled();
+  });
+
   it('returns the validated extraction on a well-formed tool_use response', async () => {
     const create = vi.fn().mockResolvedValue(toolUseMessage(VALID_INPUT));
 
