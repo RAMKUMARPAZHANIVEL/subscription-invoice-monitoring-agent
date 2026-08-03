@@ -25,11 +25,15 @@ vi.mock('./agent/invoiceMonitor.js', () => ({
 
 const invoiceFindMany = vi.fn<(...args: unknown[]) => Promise<unknown>>();
 const invoiceFindUnique = vi.fn<(...args: unknown[]) => Promise<unknown>>();
+const processingHistoryEntryFindMany = vi.fn<(...args: unknown[]) => Promise<unknown>>();
 vi.mock('./storage/prisma.js', () => ({
   prisma: {
     invoice: {
       findMany: (...args: unknown[]) => invoiceFindMany(...args),
       findUnique: (...args: unknown[]) => invoiceFindUnique(...args),
+    },
+    processingHistoryEntry: {
+      findMany: (...args: unknown[]) => processingHistoryEntryFindMany(...args),
     },
   },
 }));
@@ -283,6 +287,151 @@ describe('GET /invoices/:id', () => {
     invoiceFindUnique.mockRejectedValue(new Error('DB unavailable'));
 
     const response = await fetch(`${baseUrl}/invoices/inv_abc123`);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ status: 'error' });
+  });
+});
+
+function buildProcessingHistoryRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'ph_789',
+    sourceEmailId: 'se_1',
+    invoiceId: null,
+    outcome: 'FAILED',
+    attemptNumber: 3,
+    errorReason: 'PDF text extraction returned empty content (likely a scanned image)',
+    evaluatedAt: new Date('2026-07-10T06:00:45.000Z'),
+    sourceEmail: {
+      gmailMessageId: '18f2b...',
+      sender: 'billing@unknownvendor.com',
+      subject: 'Invoice #492',
+    },
+    ...overrides,
+  };
+}
+
+describe('GET /processing-history', () => {
+  let baseUrl: string;
+  let server: ReturnType<ReturnType<typeof createServer>['listen']>;
+
+  beforeEach(() => {
+    processingHistoryEntryFindMany.mockReset();
+    const app = createServer();
+    server = app.listen(0);
+    const { port } = server.address() as AddressInfo;
+    baseUrl = `http://127.0.0.1:${port}`;
+  });
+
+  afterEach(() => {
+    server.close();
+  });
+
+  it('returns the mapped history entries with no next cursor when the page is not full', async () => {
+    processingHistoryEntryFindMany.mockResolvedValue([buildProcessingHistoryRow()]);
+
+    const response = await fetch(`${baseUrl}/processing-history`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      entries: [
+        {
+          id: 'ph_789',
+          sourceEmail: {
+            gmailMessageId: '18f2b...',
+            sender: 'billing@unknownvendor.com',
+            subject: 'Invoice #492',
+          },
+          outcome: 'FAILED',
+          invoiceId: null,
+          attemptNumber: 3,
+          errorReason: 'PDF text extraction returned empty content (likely a scanned image)',
+          evaluatedAt: '2026-07-10T06:00:45.000Z',
+        },
+      ],
+      nextCursor: null,
+    });
+    expect(processingHistoryEntryFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {},
+        orderBy: [{ evaluatedAt: 'desc' }, { id: 'desc' }],
+      }),
+    );
+  });
+
+  it('includes linked invoice information when the outcome is PROCESSED', async () => {
+    processingHistoryEntryFindMany.mockResolvedValue([
+      buildProcessingHistoryRow({
+        outcome: 'PROCESSED',
+        invoiceId: 'inv_abc123',
+        errorReason: null,
+      }),
+    ]);
+
+    const response = await fetch(`${baseUrl}/processing-history`);
+    const body = (await response.json()) as { entries: Array<{ invoiceId: string | null }> };
+
+    expect(response.status).toBe(200);
+    expect(body.entries[0]?.invoiceId).toBe('inv_abc123');
+  });
+
+  it('requests one extra row and returns a nextCursor when more results exist', async () => {
+    processingHistoryEntryFindMany.mockResolvedValue([
+      buildProcessingHistoryRow({ id: 'ph_1' }),
+      buildProcessingHistoryRow({ id: 'ph_2' }),
+    ]);
+
+    const response = await fetch(`${baseUrl}/processing-history?limit=1`);
+    const body = (await response.json()) as { entries: unknown[]; nextCursor: string | null };
+
+    expect(response.status).toBe(200);
+    expect(body.entries).toHaveLength(1);
+    expect(body.nextCursor).toBe('ph_1');
+    expect(processingHistoryEntryFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 2, where: {} }),
+    );
+  });
+
+  it('filters by outcome and evaluatedAt date range', async () => {
+    processingHistoryEntryFindMany.mockResolvedValue([]);
+
+    const response = await fetch(
+      `${baseUrl}/processing-history?outcome=FAILED&from=2026-01-01&to=2026-12-31`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(processingHistoryEntryFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          outcome: 'FAILED',
+          evaluatedAt: { gte: new Date('2026-01-01'), lte: new Date('2026-12-31') },
+        },
+      }),
+    );
+  });
+
+  it('applies the cursor to skip past the reference row', async () => {
+    processingHistoryEntryFindMany.mockResolvedValue([]);
+
+    const response = await fetch(`${baseUrl}/processing-history?cursor=ph_789`);
+
+    expect(response.status).toBe(200);
+    expect(processingHistoryEntryFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ cursor: { id: 'ph_789' }, skip: 1 }),
+    );
+  });
+
+  it('returns 400 for an invalid outcome filter', async () => {
+    const response = await fetch(`${baseUrl}/processing-history?outcome=NOT_REAL`);
+
+    expect(response.status).toBe(400);
+    expect(processingHistoryEntryFindMany).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 when the query fails', async () => {
+    processingHistoryEntryFindMany.mockRejectedValue(new Error('DB unavailable'));
+
+    const response = await fetch(`${baseUrl}/processing-history`);
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ status: 'error' });

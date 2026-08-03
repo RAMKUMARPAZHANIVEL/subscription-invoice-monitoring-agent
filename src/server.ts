@@ -5,11 +5,19 @@ import { logger } from './lib/logger.js';
 import { runInvoiceCheck } from './agent/invoiceMonitor.js';
 import { prisma } from './storage/prisma.js';
 import type { Prisma } from './generated/prisma/client.js';
-import { SubscriptionType } from './generated/prisma/enums.js';
+import { ProcessingOutcome, SubscriptionType } from './generated/prisma/enums.js';
 
 const listInvoicesQuerySchema = z.object({
   vendor: z.string().min(1).optional(),
   subscriptionType: z.nativeEnum(SubscriptionType).optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  cursor: z.string().min(1).optional(),
+});
+
+const listProcessingHistoryQuerySchema = z.object({
+  outcome: z.nativeEnum(ProcessingOutcome).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
@@ -83,6 +91,30 @@ function toInvoiceDetail(invoice: InvoiceDetailRow) {
       attemptNumber: entry.attemptNumber,
       evaluatedAt: entry.evaluatedAt.toISOString(),
     })),
+  };
+}
+
+const processingHistoryInclude = {
+  sourceEmail: { select: { gmailMessageId: true, sender: true, subject: true } },
+} satisfies Prisma.ProcessingHistoryEntryInclude;
+
+type ProcessingHistoryRow = Prisma.ProcessingHistoryEntryGetPayload<{
+  include: typeof processingHistoryInclude;
+}>;
+
+function toProcessingHistoryItem(entry: ProcessingHistoryRow) {
+  return {
+    id: entry.id,
+    sourceEmail: {
+      gmailMessageId: entry.sourceEmail.gmailMessageId,
+      sender: entry.sourceEmail.sender,
+      subject: entry.sourceEmail.subject,
+    },
+    outcome: entry.outcome,
+    invoiceId: entry.invoiceId,
+    attemptNumber: entry.attemptNumber,
+    errorReason: entry.errorReason,
+    evaluatedAt: entry.evaluatedAt.toISOString(),
   };
 }
 
@@ -192,6 +224,48 @@ export function createServer(): Express {
       );
     } catch (error) {
       logger.error({ invoiceId: id, error }, 'GET /invoices/:id failed');
+      res.status(500).json({ status: 'error' });
+    }
+  });
+
+  app.get('/processing-history', async (req: Request, res: Response) => {
+    const startedAt = Date.now();
+    logger.info({ query: req.query }, 'Received GET /processing-history request');
+    try {
+      const parsed = listProcessingHistoryQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({ status: 'error', message: 'Invalid query parameters' });
+        return;
+      }
+      const { outcome, from, to, limit, cursor } = parsed.data;
+
+      const where: Prisma.ProcessingHistoryEntryWhereInput = {
+        ...(outcome ? { outcome } : {}),
+        ...(from || to
+          ? { evaluatedAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+          : {}),
+      };
+
+      const rows = await prisma.processingHistoryEntry.findMany({
+        where,
+        orderBy: [{ evaluatedAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        include: processingHistoryInclude,
+      });
+
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+      const lastRow = page[page.length - 1];
+      const nextCursor = hasMore && lastRow ? lastRow.id : null;
+
+      res.status(200).json({ entries: page.map(toProcessingHistoryItem), nextCursor });
+      logger.info(
+        { durationMs: Date.now() - startedAt, count: page.length },
+        'GET /processing-history completed',
+      );
+    } catch (error) {
+      logger.error({ error }, 'GET /processing-history failed');
       res.status(500).json({ status: 'error' });
     }
   });

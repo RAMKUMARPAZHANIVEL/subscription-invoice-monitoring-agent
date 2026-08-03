@@ -122,6 +122,7 @@ Operator-facing view for triaging failures without reading raw logs (FR-008, FR-
         "subject": "Invoice #492"
       },
       "outcome": "FAILED",
+      "invoiceId": null,
       "attemptNumber": 3,
       "errorReason": "PDF text extraction returned empty content (likely a scanned image)",
       "evaluatedAt": "2026-07-10T06:00:45.000Z"
@@ -130,6 +131,9 @@ Operator-facing view for triaging failures without reading raw logs (FR-008, FR-
   "nextCursor": null
 }
 ```
+
+`invoiceId` is set only when `outcome = PROCESSED` (or `SKIPPED_DUPLICATE`, which links back to the
+original invoice); `null` otherwise.
 
 ## Error format
 
