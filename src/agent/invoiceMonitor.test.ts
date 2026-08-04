@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as AiExtractorModule from './extraction/aiExtractor.js';
 
 // invoiceMonitor.ts transitively imports env.ts (via the Gmail client, Prisma, and the
 // attachment stores); mock it so this file's pure-function tests don't require a full
@@ -28,7 +29,10 @@ vi.mock('../config/env.js', () => ({
 }));
 
 const extractInvoiceDataMock = vi.fn();
-vi.mock('./extraction/aiExtractor.js', () => ({
+vi.mock('./extraction/aiExtractor.js', async (importOriginal) => ({
+  // invoiceMonitor.ts's isRecoverableError does `err instanceof AiExtractionError`, so the real
+  // class must survive the mock even though extractInvoiceData itself is stubbed.
+  ...(await importOriginal<typeof AiExtractorModule>()),
   extractInvoiceData: extractInvoiceDataMock,
 }));
 
@@ -263,5 +267,169 @@ describe('runInvoiceCheck duplicate prevention (integration, real Postgres)', ()
     expect(history[0]?.outcome).toBe('PROCESSED');
     expect(history[1]?.outcome).toBe('SKIPPED_DUPLICATE');
     expect(history[1]?.invoiceId).toBe(invoices[0]!.id);
+  });
+});
+
+describe('runInvoiceCheck per-email isolation (integration, real Postgres)', () => {
+  let vendorId: string;
+  let baseDir: string;
+  let attachmentStore: InstanceType<typeof LocalAttachmentStore>;
+
+  const VALID_EXTRACTION = {
+    amount: '49.00',
+    currency: 'USD',
+    invoiceDate: '2026-06-01',
+    extractionConfidence: 'HIGH' as const,
+  };
+
+  const ATTACHMENT_CSV = 'description,amount\nSeats,49.00\n';
+
+  interface FixtureEmail {
+    gmailMessageId: string;
+    subject: string;
+    attachmentId: string;
+    filename: string;
+    mimeType: string;
+    data: Buffer;
+  }
+
+  // T034 (US3): email B carries a zero-byte "PDF" attachment, which extractPdfText (per
+  // pdfExtractor.test.ts) rejects as unparseable rather than silently producing empty text — a
+  // deterministic stand-in for "malformed attachment" that doesn't depend on the mocked Claude
+  // call and fails on the first attempt (not a recoverable error, so no retries/backoff).
+  function fakeGmailClientForBatch(
+    emails: FixtureEmail[],
+  ): Pick<GmailClient, 'listMessages' | 'getMessage' | 'getAttachment'> {
+    return {
+      listMessages: vi.fn().mockResolvedValue({
+        messages: emails.map((email) => ({ id: email.gmailMessageId, threadId: 'thread-1' })),
+      }),
+      getMessage: vi.fn().mockImplementation((messageId: string) => {
+        const email = emails.find((candidate) => candidate.gmailMessageId === messageId);
+        if (!email) throw new Error(`Unexpected messageId: ${messageId}`);
+        return {
+          id: email.gmailMessageId,
+          threadId: 'thread-1',
+          internalDate: String(Date.now()),
+          payload: {
+            mimeType: 'multipart/mixed',
+            headers: [
+              { name: 'From', value: 'billing@testvendor.example' },
+              { name: 'Subject', value: email.subject },
+            ],
+            parts: [
+              {
+                filename: email.filename,
+                mimeType: email.mimeType,
+                body: { attachmentId: email.attachmentId },
+              },
+            ],
+          },
+        };
+      }),
+      getAttachment: vi.fn().mockImplementation((_messageId: string, attachmentId: string) => {
+        const email = emails.find((candidate) => candidate.attachmentId === attachmentId);
+        if (!email) throw new Error(`Unexpected attachmentId: ${attachmentId}`);
+        return {
+          size: email.data.length,
+          data: email.data.toString('base64url'),
+        };
+      }),
+    };
+  }
+
+  beforeEach(async () => {
+    baseDir = await mkdtemp(path.join(tmpdir(), 'sima-invoicemonitor-isolation-test-'));
+    attachmentStore = new LocalAttachmentStore(baseDir);
+    extractInvoiceDataMock.mockReset().mockResolvedValue(VALID_EXTRACTION);
+
+    const vendor = await prisma.vendor.create({
+      data: {
+        name: `Test Vendor ${randomUUID()}`,
+        senderPatterns: ['billing@testvendor.example'],
+        subjectPatterns: [],
+      },
+    });
+    vendorId = vendor.id;
+  });
+
+  afterEach(async () => {
+    await rm(baseDir, { recursive: true, force: true });
+    await prisma.processingHistoryEntry.deleteMany({ where: { sourceEmail: { vendorId } } });
+    await prisma.attachment.deleteMany({ where: { sourceEmail: { vendorId } } });
+    await prisma.invoice.deleteMany({ where: { vendorId } });
+    await prisma.sourceEmail.deleteMany({ where: { vendorId } });
+    await prisma.vendor.delete({ where: { id: vendorId } });
+  });
+
+  it('does not let one failing email abort the rest of the batch', async () => {
+    const emailA: FixtureEmail = {
+      gmailMessageId: `msg-a-${randomUUID()}`,
+      subject: 'Your invoice A',
+      attachmentId: 'att-a',
+      filename: 'invoice-a.csv',
+      mimeType: 'text/csv',
+      data: Buffer.from(ATTACHMENT_CSV),
+    };
+    const emailB: FixtureEmail = {
+      gmailMessageId: `msg-b-${randomUUID()}`,
+      subject: 'Your invoice B',
+      attachmentId: 'att-b',
+      filename: 'invoice-b.pdf',
+      mimeType: 'application/pdf',
+      data: Buffer.alloc(0),
+    };
+    const emailC: FixtureEmail = {
+      gmailMessageId: `msg-c-${randomUUID()}`,
+      subject: 'Your invoice C',
+      attachmentId: 'att-c',
+      filename: 'invoice-c.csv',
+      mimeType: 'text/csv',
+      data: Buffer.from(ATTACHMENT_CSV),
+    };
+
+    const gmailClient = fakeGmailClientForBatch([emailA, emailB, emailC]);
+
+    const summary = await runInvoiceCheck({ gmailClient, attachmentStore });
+
+    expect(summary.invoicesProcessed).toBe(2);
+    expect(summary.failures).toBe(1);
+
+    const invoices = await prisma.invoice.findMany({ where: { vendorId } });
+    expect(invoices).toHaveLength(2);
+
+    const sourceEmailA = await prisma.sourceEmail.findUnique({
+      where: { gmailMessageId: emailA.gmailMessageId },
+      include: { invoice: true },
+    });
+    const sourceEmailB = await prisma.sourceEmail.findUnique({
+      where: { gmailMessageId: emailB.gmailMessageId },
+    });
+    const sourceEmailC = await prisma.sourceEmail.findUnique({
+      where: { gmailMessageId: emailC.gmailMessageId },
+      include: { invoice: true },
+    });
+
+    expect(sourceEmailA?.invoice).not.toBeNull();
+    expect(sourceEmailC?.invoice).not.toBeNull();
+
+    const historyB = await prisma.processingHistoryEntry.findMany({
+      where: { sourceEmailId: sourceEmailB!.id },
+    });
+    expect(historyB).toHaveLength(1);
+    expect(historyB[0]?.outcome).toBe('FAILED');
+    expect(historyB[0]?.errorReason).toMatch(/PDF/i);
+
+    const historyA = await prisma.processingHistoryEntry.findMany({
+      where: { sourceEmailId: sourceEmailA!.id },
+    });
+    expect(historyA).toHaveLength(1);
+    expect(historyA[0]?.outcome).toBe('PROCESSED');
+
+    const historyC = await prisma.processingHistoryEntry.findMany({
+      where: { sourceEmailId: sourceEmailC!.id },
+    });
+    expect(historyC).toHaveLength(1);
+    expect(historyC[0]?.outcome).toBe('PROCESSED');
   });
 });
