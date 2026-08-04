@@ -11,6 +11,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { env } from '../config/env.js';
+import { Prisma } from '../generated/prisma/client.js';
 import { logger } from '../lib/logger.js';
 import type { AttachmentMetadata, AttachmentStore } from '../storage/attachmentStore.js';
 import { GcsAttachmentStore } from '../storage/gcsAttachmentStore.js';
@@ -19,10 +20,71 @@ import { prisma } from '../storage/prisma.js';
 import { downloadMessageAttachments } from './gmail/attachments.js';
 import { GmailClient, type GmailMessagePart } from './gmail/client.js';
 import { discoverCandidateEmails, type CandidateEmailRef } from './gmail/discovery.js';
-import { extractInvoiceData } from './extraction/aiExtractor.js';
+import { AiExtractionError, extractInvoiceData } from './extraction/aiExtractor.js';
 import { extractCsvData } from './extraction/csvExtractor.js';
 import { extractPdfText } from './extraction/pdfExtractor.js';
 import { findMatchingVendor, loadEnabledVendors, type Vendor } from './vendors/vendorConfig.js';
+
+/**
+ * T037 (US3): recoverable-failure retry for one email's extraction/persistence attempt. Only
+ * failures that are plausibly transient — Gmail rate limits, Claude/Bedrock timeouts, Cloud
+ * Storage timeouts, Postgres deadlocks/serialization conflicts — are retried; invalid invoice
+ * data, malformed attachments, and Zod validation failures are terminal and fail immediately
+ * (retrying can never fix them). Matches the backoff schedule in data-model.md's `RETRYING`
+ * outcome: attempt 1 immediately, attempt 2 after 500ms, attempt 3 after 1000ms.
+ */
+const MAX_PROCESSING_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = [0, 500, 1000];
+
+const RETRYABLE_HTTP_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const RETRYABLE_SYSTEM_CODES = new Set(['ETIMEDOUT', 'ECONNRESET', 'ECONNABORTED', 'EPIPE']);
+// Postgres deadlock/serialization write conflict surfaced through Prisma's interactive
+// transactions: https://www.prisma.io/docs/orm/reference/error-reference#p2034
+const RETRYABLE_PRISMA_CODES = new Set(['P2034']);
+const RECOVERABLE_MESSAGE_PATTERN = /(rate limit|timed?\s*out|timeout|deadlock)/i;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getHttpStatus(err: unknown): number | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const candidate = err as {
+    status?: unknown;
+    response?: { status?: unknown };
+    $metadata?: { httpStatusCode?: unknown };
+  };
+  if (typeof candidate.status === 'number') return candidate.status;
+  if (typeof candidate.response?.status === 'number') return candidate.response.status;
+  if (typeof candidate.$metadata?.httpStatusCode === 'number') {
+    return candidate.$metadata.httpStatusCode;
+  }
+  return undefined;
+}
+
+function isRecoverableError(err: unknown): boolean {
+  // extractInvoiceData wraps both transient API failures and terminal validation failures in
+  // AiExtractionError; only the former carries a `cause` (the underlying API/network error).
+  if (err instanceof AiExtractionError) {
+    return err.cause !== undefined && isRecoverableError(err.cause);
+  }
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    return RETRYABLE_PRISMA_CODES.has(err.code);
+  }
+  const status = getHttpStatus(err);
+  if (status !== undefined) return RETRYABLE_HTTP_STATUS.has(status);
+  if (typeof err === 'object' && err !== null) {
+    const code = (err as { code?: unknown }).code;
+    if (typeof code === 'string' && RETRYABLE_SYSTEM_CODES.has(code)) return true;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return RECOVERABLE_MESSAGE_PATTERN.test(message);
+}
+
+/** `${ErrorName}: message` — used both for the persisted `errorReason` and structured logs. */
+function describeError(err: unknown): string {
+  return err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+}
 
 /** The subset of `GmailClient` the orchestrator needs — keeps this module easy to test. */
 type IngestionGmailClient = Pick<GmailClient, 'listMessages' | 'getMessage' | 'getAttachment'>;
@@ -324,67 +386,130 @@ async function processCandidateEmail(
   }
 
   counters.invoiceEmailsFound += 1;
+  // Narrowed copy: `vendor`'s `!vendor` guard above doesn't survive into the nested
+  // `extractAndPersistInvoice` closure declared below, since TS re-widens closure-captured
+  // variables to their declared type.
+  const matchedVendor: Vendor = vendor;
 
-  try {
-    const downloaded = await downloadMessageAttachments(
-      ctx.gmailClient,
-      ctx.attachmentStore,
-      message.id,
-      message.payload,
-    );
-    const attachmentRecords = await Promise.all(
-      downloaded.map((attachment) =>
-        prisma.attachment.create({
+  // Attachment download/records happen once, outside the retry loop below, so a retried
+  // extraction never re-downloads or duplicates Attachment rows; they stay linked to the
+  // SourceEmail (and thus available for diagnostics) even if extraction ultimately fails.
+  const downloaded = await downloadMessageAttachments(
+    ctx.gmailClient,
+    ctx.attachmentStore,
+    message.id,
+    message.payload,
+  );
+  const attachmentRecords = await Promise.all(
+    downloaded.map((attachment) =>
+      prisma.attachment.create({
+        data: {
+          sourceEmailId: sourceEmail.id,
+          filename: attachment.filename,
+          mimeType: attachment.mimeType,
+          storageRef: attachment.storageRef,
+          sizeBytes: attachment.sizeBytes,
+        },
+      }),
+    ),
+  );
+
+  let finalAttemptNumber = attemptNumber;
+
+  /**
+   * Extraction + persistence (Claude/Bedrock call, then the Invoice create + Attachment link)
+   * retried up to MAX_PROCESSING_ATTEMPTS on recoverable failures (4.4 T037). The invoice
+   * create/link pair runs inside one `$transaction` so a retried attempt can never leave a
+   * half-linked invoice or violate `Invoice.sourceEmailId`'s unique constraint on retry.
+   */
+  async function extractAndPersistInvoice() {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_PROCESSING_ATTEMPTS; attempt += 1) {
+      finalAttemptNumber = attemptNumber + attempt - 1;
+      try {
+        const sourceText = await buildSourceText(ctx.attachmentStore, downloaded, bodyText);
+        const extracted = await extractInvoiceData({
+          vendorName: matchedVendor.name,
+          sourceText,
+        });
+        // Vendor.defaultSubscriptionType is the documented fallback hint (data-model.md) when
+        // extraction itself can't determine the subscription model from the email.
+        const subscriptionType =
+          extracted.subscriptionType ?? matchedVendor.defaultSubscriptionType ?? undefined;
+
+        return await prisma.$transaction(async (tx) => {
+          const invoice = await tx.invoice.create({
+            data: {
+              sourceEmailId: sourceEmail.id,
+              vendorId: matchedVendor.id,
+              amount: extracted.amount,
+              currency: extracted.currency,
+              invoiceDate: new Date(extracted.invoiceDate),
+              ...(extracted.billingPeriodStart
+                ? { billingPeriodStart: new Date(extracted.billingPeriodStart) }
+                : {}),
+              ...(extracted.billingPeriodEnd
+                ? { billingPeriodEnd: new Date(extracted.billingPeriodEnd) }
+                : {}),
+              ...(subscriptionType ? { subscriptionType } : {}),
+              ...(extracted.lineItems ? { lineItems: extracted.lineItems } : {}),
+              extractionConfidence: extracted.extractionConfidence,
+            },
+          });
+
+          if (attachmentRecords.length > 0) {
+            await tx.attachment.updateMany({
+              where: { id: { in: attachmentRecords.map((record) => record.id) } },
+              data: { invoiceId: invoice.id },
+            });
+          }
+
+          return invoice;
+        });
+      } catch (err) {
+        lastError = err;
+        const attemptsRemain = attempt < MAX_PROCESSING_ATTEMPTS;
+        if (!attemptsRemain || !isRecoverableError(err)) {
+          throw err;
+        }
+
+        const backoffMs = RETRY_BACKOFF_MS[attempt] ?? 0;
+        logger.warn(
+          {
+            runId: ctx.runId,
+            gmailMessageId: message.id,
+            vendor: matchedVendor.name,
+            errorType: err instanceof Error ? err.name : typeof err,
+            errorMessage: describeError(err),
+            attemptNumber: finalAttemptNumber,
+            backoffMs,
+          },
+          'Retrying recoverable failure while processing invoice email',
+        );
+        await prisma.processingHistoryEntry.create({
           data: {
             sourceEmailId: sourceEmail.id,
-            filename: attachment.filename,
-            mimeType: attachment.mimeType,
-            storageRef: attachment.storageRef,
-            sizeBytes: attachment.sizeBytes,
+            outcome: 'RETRYING',
+            attemptNumber: finalAttemptNumber,
+            errorReason: describeError(err),
+            evaluatedAt: new Date(),
           },
-        }),
-      ),
-    );
-
-    const sourceText = await buildSourceText(ctx.attachmentStore, downloaded, bodyText);
-    const extracted = await extractInvoiceData({ vendorName: vendor.name, sourceText });
-    // Vendor.defaultSubscriptionType is the documented fallback hint (data-model.md) when
-    // extraction itself can't determine the subscription model from the email.
-    const subscriptionType =
-      extracted.subscriptionType ?? vendor.defaultSubscriptionType ?? undefined;
-
-    const invoice = await prisma.invoice.create({
-      data: {
-        sourceEmailId: sourceEmail.id,
-        vendorId: vendor.id,
-        amount: extracted.amount,
-        currency: extracted.currency,
-        invoiceDate: new Date(extracted.invoiceDate),
-        ...(extracted.billingPeriodStart
-          ? { billingPeriodStart: new Date(extracted.billingPeriodStart) }
-          : {}),
-        ...(extracted.billingPeriodEnd
-          ? { billingPeriodEnd: new Date(extracted.billingPeriodEnd) }
-          : {}),
-        ...(subscriptionType ? { subscriptionType } : {}),
-        ...(extracted.lineItems ? { lineItems: extracted.lineItems } : {}),
-        extractionConfidence: extracted.extractionConfidence,
-      },
-    });
-
-    if (attachmentRecords.length > 0) {
-      await prisma.attachment.updateMany({
-        where: { id: { in: attachmentRecords.map((record) => record.id) } },
-        data: { invoiceId: invoice.id },
-      });
+        });
+        if (backoffMs > 0) await delay(backoffMs);
+      }
     }
+    throw lastError;
+  }
+
+  try {
+    const invoice = await extractAndPersistInvoice();
 
     await prisma.processingHistoryEntry.create({
       data: {
         sourceEmailId: sourceEmail.id,
         invoiceId: invoice.id,
         outcome: 'PROCESSED',
-        attemptNumber,
+        attemptNumber: finalAttemptNumber,
         evaluatedAt: new Date(),
       },
     });
@@ -395,18 +520,18 @@ async function processCandidateEmail(
         gmailMessageId: message.id,
         vendor: vendor.name,
         invoiceId: invoice.id,
+        attemptNumber: finalAttemptNumber,
         durationMs: Date.now() - startedAt,
       },
       'Invoice persisted',
     );
   } catch (err) {
-    const errorReason = err instanceof Error ? err.message : String(err);
     await prisma.processingHistoryEntry.create({
       data: {
         sourceEmailId: sourceEmail.id,
         outcome: 'FAILED',
-        attemptNumber,
-        errorReason,
+        attemptNumber: finalAttemptNumber,
+        errorReason: describeError(err),
         evaluatedAt: new Date(),
       },
     });
@@ -416,6 +541,9 @@ async function processCandidateEmail(
         runId: ctx.runId,
         gmailMessageId: message.id,
         vendor: vendor.name,
+        errorType: err instanceof Error ? err.name : typeof err,
+        errorMessage: describeError(err),
+        attemptNumber: finalAttemptNumber,
         durationMs: Date.now() - startedAt,
         err,
       },

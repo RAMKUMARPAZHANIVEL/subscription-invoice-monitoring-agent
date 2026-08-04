@@ -179,7 +179,7 @@ Scenario 3).
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Add per-email try/catch isolation with attempt-count tracking and
+- [x] T037 [US3] Add per-email try/catch isolation with attempt-count tracking and
       recoverable-error retry in `src/agent/invoiceMonitor.ts` (depends on T032)
 - [ ] T038 [US3] Compute the `RunSummary` (start/end/duration/scanned/processed/failures) and
       return it from `POST /tasks/ingest-invoices` in `src/agent/invoiceMonitor.ts` and
