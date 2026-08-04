@@ -40,6 +40,7 @@ const { LocalAttachmentStore } = await import('../storage/localAttachmentStore.j
 const { prisma } = await import('../storage/prisma.js');
 const { buildSourceText, classifyAttachmentType, extractBodyText, getHeader, runInvoiceCheck } =
   await import('./invoiceMonitor.js');
+const { AiExtractionError } = await import('./extraction/aiExtractor.js');
 import type { GmailClient, GmailMessagePart } from './gmail/client.js';
 
 describe('getHeader', () => {
@@ -431,5 +432,188 @@ describe('runInvoiceCheck per-email isolation (integration, real Postgres)', () 
     });
     expect(historyC).toHaveLength(1);
     expect(historyC[0]?.outcome).toBe('PROCESSED');
+  });
+});
+
+describe('runInvoiceCheck retry logic (integration, real Postgres)', () => {
+  let vendorId: string;
+  let baseDir: string;
+  let attachmentStore: InstanceType<typeof LocalAttachmentStore>;
+
+  const VALID_EXTRACTION = {
+    amount: '49.00',
+    currency: 'USD',
+    invoiceDate: '2026-06-01',
+    extractionConfidence: 'HIGH' as const,
+  };
+
+  const ATTACHMENT_CSV = 'description,amount\nSeats,49.00\n';
+
+  // isRecoverableError (invoiceMonitor.ts) only treats an AiExtractionError as recoverable when
+  // it carries a `cause` matching a transient failure signature (timeout/rate-limit/deadlock, a
+  // retryable HTTP status, or a retryable system error code) — this mirrors the real shape
+  // aiExtractor.ts throws for an API-call failure vs. a terminal validation failure.
+  function recoverableExtractionError(): InstanceType<typeof AiExtractionError> {
+    return new AiExtractionError('Claude invoice extraction API call failed', {
+      cause: new Error('Request timed out'),
+    });
+  }
+
+  function permanentExtractionError(): InstanceType<typeof AiExtractionError> {
+    return new AiExtractionError(
+      'Claude invoice extraction failed validation after 3 attempts: amount is required',
+    );
+  }
+
+  function fakeGmailClient(
+    gmailMessageId: string,
+  ): Pick<GmailClient, 'listMessages' | 'getMessage' | 'getAttachment'> {
+    return {
+      listMessages: vi
+        .fn()
+        .mockResolvedValue({ messages: [{ id: gmailMessageId, threadId: 'thread-1' }] }),
+      getMessage: vi.fn().mockResolvedValue({
+        id: gmailMessageId,
+        threadId: 'thread-1',
+        internalDate: String(Date.now()),
+        payload: {
+          mimeType: 'multipart/mixed',
+          headers: [
+            { name: 'From', value: 'billing@testvendor.example' },
+            { name: 'Subject', value: 'Your invoice' },
+          ],
+          parts: [
+            {
+              filename: 'invoice.csv',
+              mimeType: 'text/csv',
+              body: { attachmentId: 'att-1' },
+            },
+          ],
+        },
+      }),
+      getAttachment: vi.fn().mockResolvedValue({
+        size: Buffer.byteLength(ATTACHMENT_CSV),
+        data: Buffer.from(ATTACHMENT_CSV).toString('base64url'),
+      }),
+    };
+  }
+
+  beforeEach(async () => {
+    baseDir = await mkdtemp(path.join(tmpdir(), 'sima-invoicemonitor-retry-test-'));
+    attachmentStore = new LocalAttachmentStore(baseDir);
+    extractInvoiceDataMock.mockReset();
+
+    const vendor = await prisma.vendor.create({
+      data: {
+        name: `Test Vendor ${randomUUID()}`,
+        senderPatterns: ['billing@testvendor.example'],
+        subjectPatterns: [],
+      },
+    });
+    vendorId = vendor.id;
+  });
+
+  afterEach(async () => {
+    await rm(baseDir, { recursive: true, force: true });
+    await prisma.processingHistoryEntry.deleteMany({ where: { sourceEmail: { vendorId } } });
+    await prisma.attachment.deleteMany({ where: { sourceEmail: { vendorId } } });
+    await prisma.invoice.deleteMany({ where: { vendorId } });
+    await prisma.sourceEmail.deleteMany({ where: { vendorId } });
+    await prisma.vendor.delete({ where: { id: vendorId } });
+  });
+
+  it('retries a recoverable failure up to the limit, then succeeds and records attemptNumber 3', async () => {
+    extractInvoiceDataMock
+      .mockRejectedValueOnce(recoverableExtractionError())
+      .mockRejectedValueOnce(recoverableExtractionError())
+      .mockResolvedValueOnce(VALID_EXTRACTION);
+
+    const gmailMessageId = `msg-${randomUUID()}`;
+    const gmailClient = fakeGmailClient(gmailMessageId);
+
+    const summary = await runInvoiceCheck({ gmailClient, attachmentStore });
+
+    expect(summary.invoicesProcessed).toBe(1);
+    expect(summary.failures).toBe(0);
+    expect(extractInvoiceDataMock).toHaveBeenCalledTimes(3);
+
+    const invoices = await prisma.invoice.findMany({ where: { vendorId } });
+    expect(invoices).toHaveLength(1);
+
+    const sourceEmail = await prisma.sourceEmail.findUnique({
+      where: { gmailMessageId },
+    });
+    const history = await prisma.processingHistoryEntry.findMany({
+      where: { sourceEmailId: sourceEmail!.id },
+      orderBy: { attemptNumber: 'asc' },
+    });
+
+    expect(history).toHaveLength(3);
+    expect(history.map((entry) => entry.outcome)).toEqual(['RETRYING', 'RETRYING', 'PROCESSED']);
+    expect(history.map((entry) => entry.attemptNumber)).toEqual([1, 2, 3]);
+    expect(history[2]?.invoiceId).toBe(invoices[0]!.id);
+    expect(history[0]?.errorReason).toMatch(/AiExtractionError.*API call failed/i);
+    expect(history[1]?.errorReason).toMatch(/AiExtractionError.*API call failed/i);
+  });
+
+  it('does not retry a permanent validation error and fails on attempt 1', async () => {
+    extractInvoiceDataMock.mockRejectedValueOnce(permanentExtractionError());
+
+    const gmailMessageId = `msg-${randomUUID()}`;
+    const gmailClient = fakeGmailClient(gmailMessageId);
+
+    const summary = await runInvoiceCheck({ gmailClient, attachmentStore });
+
+    expect(summary.invoicesProcessed).toBe(0);
+    expect(summary.failures).toBe(1);
+    expect(extractInvoiceDataMock).toHaveBeenCalledTimes(1);
+
+    const invoices = await prisma.invoice.findMany({ where: { vendorId } });
+    expect(invoices).toHaveLength(0);
+
+    const sourceEmail = await prisma.sourceEmail.findUnique({
+      where: { gmailMessageId },
+    });
+    const history = await prisma.processingHistoryEntry.findMany({
+      where: { sourceEmailId: sourceEmail!.id },
+      orderBy: { attemptNumber: 'asc' },
+    });
+
+    expect(history).toHaveLength(1);
+    expect(history[0]?.outcome).toBe('FAILED');
+    expect(history[0]?.attemptNumber).toBe(1);
+    expect(history[0]?.errorReason).toMatch(/validation/i);
+  });
+
+  it('exhausts all 3 attempts on repeated recoverable failures and records FAILED at attemptNumber 3', async () => {
+    extractInvoiceDataMock
+      .mockRejectedValueOnce(recoverableExtractionError())
+      .mockRejectedValueOnce(recoverableExtractionError())
+      .mockRejectedValueOnce(recoverableExtractionError());
+
+    const gmailMessageId = `msg-${randomUUID()}`;
+    const gmailClient = fakeGmailClient(gmailMessageId);
+
+    const summary = await runInvoiceCheck({ gmailClient, attachmentStore });
+
+    expect(summary.invoicesProcessed).toBe(0);
+    expect(summary.failures).toBe(1);
+    expect(extractInvoiceDataMock).toHaveBeenCalledTimes(3);
+
+    const invoices = await prisma.invoice.findMany({ where: { vendorId } });
+    expect(invoices).toHaveLength(0);
+
+    const sourceEmail = await prisma.sourceEmail.findUnique({
+      where: { gmailMessageId },
+    });
+    const history = await prisma.processingHistoryEntry.findMany({
+      where: { sourceEmailId: sourceEmail!.id },
+      orderBy: { attemptNumber: 'asc' },
+    });
+
+    expect(history).toHaveLength(3);
+    expect(history.map((entry) => entry.outcome)).toEqual(['RETRYING', 'RETRYING', 'FAILED']);
+    expect(history.map((entry) => entry.attemptNumber)).toEqual([1, 2, 3]);
+    expect(history[2]?.errorReason).toMatch(/AiExtractionError.*API call failed/i);
   });
 });
