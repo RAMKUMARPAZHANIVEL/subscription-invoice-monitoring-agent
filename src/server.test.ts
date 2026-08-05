@@ -67,6 +67,8 @@ describe('POST /tasks/ingest-invoices', () => {
       invoiceEmailsFound: 12,
       invoicesProcessed: 11,
       skipped: 1,
+      duplicateEmails: 1,
+      retryCount: 2,
       failures: 1,
     });
 
@@ -74,11 +76,15 @@ describe('POST /tasks/ingest-invoices', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
+      runId: 'run_1',
       startedAt: '2026-07-10T06:00:00.000Z',
       finishedAt: '2026-07-10T06:01:42.000Z',
       durationMs: 102000,
       emailsScanned: 14,
       invoicesProcessed: 11,
+      emailsSkipped: 1,
+      duplicateEmails: 1,
+      retryCount: 2,
       failures: 1,
     });
     expect(runInvoiceCheck).toHaveBeenCalledTimes(1);

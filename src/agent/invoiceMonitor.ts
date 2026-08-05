@@ -103,6 +103,8 @@ export interface RunSummary {
   invoiceEmailsFound: number;
   invoicesProcessed: number;
   skipped: number;
+  duplicateEmails: number;
+  retryCount: number;
   failures: number;
 }
 
@@ -111,11 +113,21 @@ interface RunCounters {
   invoiceEmailsFound: number;
   invoicesProcessed: number;
   skipped: number;
+  duplicateEmails: number;
+  retryCount: number;
   failures: number;
 }
 
 function createCounters(): RunCounters {
-  return { emailsScanned: 0, invoiceEmailsFound: 0, invoicesProcessed: 0, skipped: 0, failures: 0 };
+  return {
+    emailsScanned: 0,
+    invoiceEmailsFound: 0,
+    invoicesProcessed: 0,
+    skipped: 0,
+    duplicateEmails: 0,
+    retryCount: 0,
+    failures: 0,
+  };
 }
 
 function buildSummary(runId: string, startedAt: Date, counters: RunCounters): RunSummary {
@@ -343,6 +355,7 @@ async function processCandidateEmail(
       },
     });
     counters.skipped += 1;
+    counters.duplicateEmails += 1;
     logger.info(
       {
         runId: ctx.runId,
@@ -495,6 +508,7 @@ async function processCandidateEmail(
             evaluatedAt: new Date(),
           },
         });
+        counters.retryCount += 1;
         if (backoffMs > 0) await delay(backoffMs);
       }
     }

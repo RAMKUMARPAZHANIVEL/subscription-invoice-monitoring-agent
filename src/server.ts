@@ -142,11 +142,15 @@ export function createServer(): Express {
     try {
       const summary = await runInvoiceCheck();
       res.status(200).json({
+        runId: summary.runId,
         startedAt: summary.startedAt,
         finishedAt: summary.finishedAt,
         durationMs: summary.durationMs,
         emailsScanned: summary.emailsScanned,
         invoicesProcessed: summary.invoicesProcessed,
+        emailsSkipped: summary.skipped,
+        duplicateEmails: summary.duplicateEmails,
+        retryCount: summary.retryCount,
         failures: summary.failures,
       });
     } catch (error) {
