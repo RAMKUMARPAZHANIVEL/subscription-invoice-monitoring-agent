@@ -327,7 +327,6 @@ async function processCandidateEmail(
   counters: RunCounters,
 ): Promise<void> {
   const startedAt = Date.now();
-  logger.info({ runId: ctx.runId, gmailMessageId: candidate.id }, 'Processing message');
 
   const message = await ctx.gmailClient.getMessage(candidate.id);
   const sender = getHeader(message.payload, 'From') ?? '';
@@ -335,6 +334,11 @@ async function processCandidateEmail(
   const receivedAt = message.internalDate ? new Date(Number(message.internalDate)) : new Date();
   const bodyText = extractBodyText(message.payload);
   const vendor = findMatchingVendor(ctx.vendors, { sender, subject });
+
+  logger.info(
+    { runId: ctx.runId, gmailMessageId: message.id, vendor: vendor?.name },
+    'Processing email',
+  );
 
   // 4.1 Duplicate detection: an email already tied to an Invoice is fully processed — record the
   // re-evaluation for audit purposes and skip re-doing the work (idempotency, Principle II).
@@ -534,10 +538,12 @@ async function processCandidateEmail(
         gmailMessageId: message.id,
         vendor: vendor.name,
         invoiceId: invoice.id,
+        amount: invoice.amount.toFixed(2),
+        currency: invoice.currency,
         attemptNumber: finalAttemptNumber,
         durationMs: Date.now() - startedAt,
       },
-      'Invoice persisted',
+      'Invoice created',
     );
   } catch (err) {
     await prisma.processingHistoryEntry.create({
@@ -576,9 +582,16 @@ export async function runInvoiceCheck(deps: InvoiceMonitorDeps = {}): Promise<Ru
   const startedAt = new Date();
   const counters = createCounters();
 
-  logger.info({ runId }, 'Starting invoice ingestion run');
-
   const vendors = await loadEnabledVendors();
+  logger.info(
+    {
+      runId,
+      startedAt: startedAt.toISOString(),
+      configuredVendors: vendors.map((vendor) => vendor.name),
+    },
+    'Starting invoice ingestion run',
+  );
+
   if (vendors.length === 0) {
     logger.warn({ runId }, 'No enabled vendors configured; ending run with nothing to do');
     return buildSummary(runId, startedAt, counters);
@@ -602,7 +615,7 @@ export async function runInvoiceCheck(deps: InvoiceMonitorDeps = {}): Promise<Ru
       // than losing it silently) — per-email isolation means the run continues regardless.
       counters.failures += 1;
       logger.error(
-        { runId, messageId: candidate.id, err },
+        { runId, gmailMessageId: candidate.id, err },
         'Failed to evaluate candidate email before it could be recorded',
       );
     }

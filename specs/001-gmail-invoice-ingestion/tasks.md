@@ -184,7 +184,7 @@ Scenario 3).
 - [x] T038 [US3] Compute the `RunSummary` (start/end/duration/scanned/processed/failures) and
       return it from `POST /tasks/ingest-invoices` in `src/agent/invoiceMonitor.ts` and
       `src/server.ts` (depends on T037)
-- [ ] T039 [US3] Emit structured Pino logs for the run summary and for each per-email failure in
+- [x] T039 [US3] Emit structured Pino logs for the run summary and for each per-email failure in
       `src/agent/invoiceMonitor.ts` (depends on T038)
 - [ ] T040 [US3] Add the daily Cloud Scheduler job (OIDC-authenticated call to
       `POST /tasks/ingest-invoices`) to the deployment pipeline in
