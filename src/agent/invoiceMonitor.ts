@@ -159,13 +159,13 @@ async function resolveDiscoverySince(): Promise<Date> {
     orderBy: { receivedAt: 'desc' },
     select: { receivedAt: true },
   });
-  // return _latest?.receivedAt ?? new Date();
+  return _latest?.receivedAt ?? new Date();
 
   // First run: look back 90 days for testing purposes
-  const since = new Date();
-  since.setDate(since.getDate() - 90);
-  logger.debug({ since: since.toISOString() }, 'Resolved discovery since');
-  return since;
+  // const since = new Date();
+  // since.setDate(since.getDate() - 90);
+  // logger.debug({ since: since.toISOString() }, 'Resolved discovery since');
+  // return since;
 }
 
 export function getHeader(payload: GmailMessagePart | undefined, name: string): string | undefined {
