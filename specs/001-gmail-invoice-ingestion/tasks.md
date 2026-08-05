@@ -186,7 +186,7 @@ Scenario 3).
       `src/server.ts` (depends on T037)
 - [x] T039 [US3] Emit structured Pino logs for the run summary and for each per-email failure in
       `src/agent/invoiceMonitor.ts` (depends on T038)
-- [ ] T040 [US3] Add the daily Cloud Scheduler job (OIDC-authenticated call to
+- [x] T040 [US3] Add the daily Cloud Scheduler job (OIDC-authenticated call to
       `POST /tasks/ingest-invoices`) to the deployment pipeline in
       `.github/workflows/deploy.yml` (depends on T028)
 

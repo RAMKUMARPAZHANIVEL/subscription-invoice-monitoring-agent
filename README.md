@@ -98,8 +98,16 @@ docker run -p 8080:8080 --env-file .env subscription-invoice-monitoring-agent
 deploys it to Cloud Run after CI passes on `main`. It authenticates via Workload Identity
 Federation and expects the following to be configured in the repository:
 
-- Secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`
+- Secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`, `GCP_SCHEDULER_SERVICE_ACCOUNT`
 - Variables: `GCP_PROJECT_ID`, `GCP_REGION`
+
+After each deploy, the workflow also creates (or updates, if already present) a Cloud Scheduler
+job that calls `POST /tasks/ingest-invoices` daily at `08:00 UTC`, with OIDC authentication as
+`GCP_SCHEDULER_SERVICE_ACCOUNT` and up to 3 retries. `GCP_SERVICE_ACCOUNT` (the deploy identity)
+needs `roles/run.admin` and `roles/iam.serviceAccountUser`, plus `roles/cloudscheduler.admin` to
+manage the Scheduler job; `GCP_SCHEDULER_SERVICE_ACCOUNT` only needs to exist — the workflow
+grants it `roles/run.invoker` on the service automatically, so no manual GCP console steps are
+required after the secrets/variables above are set.
 
 ## Endpoints
 
