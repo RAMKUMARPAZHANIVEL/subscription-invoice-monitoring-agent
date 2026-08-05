@@ -202,7 +202,7 @@ failure visibility is in place.
 - [ ] T041 [P] Update `README.md` with the new endpoints, environment variables, and Prisma setup
       steps
 - [ ] T042 [P] Add `db:migrate` and `db:seed` scripts (for `Vendor` seed data) to `package.json`
-- [ ] T043 Run the `quickstart.md` validation scenarios end-to-end against a real or sandbox
+- [x] T043 Run the `quickstart.md` validation scenarios end-to-end against a real or sandbox
       Gmail account and record the results
 - [ ] T044 [P] Security review: confirm no secrets appear in logs (Pino redaction for tokens/keys)
       and the Gmail OAuth scope stays `gmail.readonly`
