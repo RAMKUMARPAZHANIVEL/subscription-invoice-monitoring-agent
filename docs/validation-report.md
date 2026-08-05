@@ -65,6 +65,30 @@ routing tweak`) is left in the stash list for whoever owns that change to pick b
 | 11  | Run summary (processed/failed/duration/scanned)             | ✔ live                                                                      | Both live runs this session returned e.g. `{"emailsScanned":2,"invoicesProcessed":0,"failures":0,"durationMs":2913,...}` — matches the `emailsScanned`/`invoicesProcessed`/`failures`/`durationMs` contract shape (issue's "scanned/processed/failed/duration" wording maps 1:1 onto these fields).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 12  | Scheduler (Cloud Scheduler trigger → automatic execution)   | ⚠ blocked, root-caused and partially fixed                                  | No live GCP project is configured in this environment (`GOOGLE_CLOUD_PROJECT`/`GCP_REGION` empty, no `gcloud`/`gh` CLI available), so a live trigger can't be issued from here. Investigating why, found the real blocker: `Deploy to Cloud Run` only runs after `CI` succeeds, and **CI has failed on every push to `main` for the last 5 days** (`format:check`), so the Cloud Scheduler job (`subscription-invoice-monitoring-agent-ingest-invoices`, defined in `.github/workflows/deploy.yml`) has never actually been created. Fixed the formatting drift (commit `bbd62f9`) and reconfirmed `format:check`/`lint`/`typecheck`/`test` all pass locally. **Not pushed to `origin/main`** — doing so triggers a real deploy to Cloud Run and provisions a live, billable, recurring Cloud Scheduler job, which is outside this task's authority to trigger unilaterally. Pushing this fix is the concrete unblock action for live Scenario 12 validation. |
 
+## Follow-up fixes (post-report)
+
+Two further CI defects were found while re-verifying this report was actually reproducible from a
+clean checkout, and fixed in commits after `bbd62f9`:
+
+- **`prisma generate` never ran in CI** (`75602be`): a fresh checkout has no generated Prisma
+  Client, so `PrismaClient` resolves to an error type and `typescript-eslint`'s type-aware rules
+  cascade into ~530 lint errors. Fixed by adding `pnpm run db:generate` immediately after install,
+  before `lint`/`typecheck`/`build`.
+- **CI had no Postgres service at all** (uncommitted at time of report, committed in this session):
+  `pnpm run test` includes real-Postgres integration tests (constitution Principle X prohibits DB
+  mocking) but the CI job never provisioned a database or ran migrations, so `pnpm run test` would
+  have failed on the very next push regardless of the formatting fix. Added a `postgres:16` service
+  container plus a `pnpm exec prisma migrate deploy` step, mirroring the local dev `DATABASE_URL`
+  convention (`.env`). Verified locally: `format:check` / `lint` (0 errors, 3 pre-existing warnings)
+  / `typecheck` all pass against this checkout; `pnpm run test` itself could not be re-run in this
+  follow-up session (no local Postgres/Docker daemon available in this environment — see limitation
+  below), but was already verified passing (146/146) in the original session and this change only
+  adds infrastructure CI was missing, without touching test or application code.
+
+Neither of these two fixes has been pushed to `origin/main` — see the existing Scenario 12 note
+below on why pushing (a real, billable Cloud Run deploy + recurring Cloud Scheduler job) is left as
+a decision outside this task's unilateral authority.
+
 ## Known issues / limitations
 
 1. **CI was broken on `main`** (Prettier drift, `format:check`) since the T041 documentation
