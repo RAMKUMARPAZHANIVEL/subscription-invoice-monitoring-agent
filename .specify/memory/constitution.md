@@ -41,9 +41,9 @@ The system shall never intentionally lose invoice data.
 
 Every discovered invoice must be:
 
-* Successfully processed and stored
-* Retried upon recoverable failure
-* Marked as failed with sufficient diagnostic information
+- Successfully processed and stored
+- Retried upon recoverable failure
+- Marked as failed with sufficient diagnostic information
 
 Silent failures are unacceptable.
 
@@ -63,11 +63,11 @@ Deterministic software engineering shall be used whenever possible.
 
 AI shall only be responsible for:
 
-* Invoice understanding
-* Vendor identification
-* Metadata extraction
-* Document normalization
-* Future anomaly explanation
+- Invoice understanding
+- Vendor identification
+- Metadata extraction
+- Document normalization
+- Future anomaly explanation
 
 Core workflows including authentication, Gmail integration, scheduling, storage, configuration, retries, and persistence must never depend on AI.
 
@@ -79,11 +79,11 @@ Security is mandatory.
 
 The system shall:
 
-* Never hardcode credentials
-* Use Secret Manager or environment variables
-* Follow least-privilege access
-* Encrypt sensitive communications
-* Protect invoice and billing information
+- Never hardcode credentials
+- Use Secret Manager or environment variables
+- Follow least-privilege access
+- Encrypt sensitive communications
+- Protect invoice and billing information
 
 Secrets must never be committed to source control.
 
@@ -95,10 +95,10 @@ Business behaviour shall be configuration driven.
 
 Adding:
 
-* Vendors
-* Gmail search rules
-* Parsing rules
-* Invoice classifiers
+- Vendors
+- Gmail search rules
+- Parsing rules
+- Invoice classifiers
 
 should require configuration rather than source code changes whenever practical.
 
@@ -110,12 +110,12 @@ Every invoice shall be traceable back to its originating email.
 
 The system shall maintain:
 
-* Processing history
-* Execution logs
-* Processing timestamps
-* Original email metadata
-* Attachment references
-* Error history
+- Processing history
+- Execution logs
+- Processing timestamps
+- Original email metadata
+- Attachment references
+- Error history
 
 No invoice should exist without provenance.
 
@@ -135,14 +135,14 @@ The application shall be deployable on Google Cloud Run without architectural ch
 
 The architecture shall support future enhancements including:
 
-* Multiple email providers
-* Multiple Gmail accounts
-* Additional AI providers
-* Budget monitoring
-* Cost anomaly detection
-* Dashboards
-* Conversational reporting
-* Additional cloud providers
+- Multiple email providers
+- Multiple Gmail accounts
+- Additional AI providers
+- Budget monitoring
+- Cost anomaly detection
+- Dashboards
+- Conversational reporting
+- Additional cloud providers
 
 Future features should extend the system rather than require redesign.
 
@@ -154,11 +154,11 @@ All code MUST be written in strict TypeScript.
 
 Every external input—including:
 
-* Gmail responses
-* AI responses
-* Environment variables
-* HTTP requests
-* Configuration files
+- Gmail responses
+- AI responses
+- Environment variables
+- HTTP requests
+- Configuration files
 
 must be validated before entering business logic.
 
@@ -172,12 +172,12 @@ Critical invoice processing logic shall be covered by automated tests.
 
 The following require unit and integration testing:
 
-* Email processing
-* Duplicate detection
-* Invoice extraction
-* Vendor classification
-* Retry behaviour
-* Configuration loading
+- Email processing
+- Duplicate detection
+- Invoice extraction
+- Vendor classification
+- Retry behaviour
+- Configuration loading
 
 Changes affecting business rules must include corresponding tests.
 
@@ -189,13 +189,13 @@ All runtime logging shall use structured logging.
 
 Every scheduled execution shall record:
 
-* Start time
-* End time
-* Execution duration
-* Emails scanned
-* Invoices processed
-* Failures
-* Retry attempts
+- Start time
+- End time
+- Execution duration
+- Emails scanned
+- Invoices processed
+- Failures
+- Retry attempts
 
 Logs shall provide sufficient information for production troubleshooting.
 
@@ -215,11 +215,11 @@ Every dependency must have a concrete business justification.
 
 Every commit shall pass:
 
-* ESLint
-* Prettier
-* TypeScript compilation
-* Unit tests
-* Integration tests (where applicable)
+- ESLint
+- Prettier
+- TypeScript compilation
+- Unit tests
+- Integration tests (where applicable)
 
 CI/CD shall independently verify all quality gates before deployment.
 
@@ -231,19 +231,19 @@ Production deployments shall never bypass automated validation.
 
 The project shall use:
 
-* Node.js 20+
-* TypeScript
-* pnpm
-* PostgreSQL
-* Prisma ORM
-* Gmail API
-* Google Cloud Run
-* Cloud Scheduler
-* Cloud Storage
-* Secret Manager
-* Pino logging
-* Vitest
-* GitHub Actions
+- Node.js 20+
+- TypeScript
+- pnpm
+- PostgreSQL
+- Prisma ORM
+- Gmail API
+- Google Cloud Run
+- Cloud Scheduler
+- Cloud Storage
+- Secret Manager
+- Pino logging
+- Vitest
+- GitHub Actions
 
 Runtime configuration shall be loaded exclusively from validated environment variables.
 
@@ -284,9 +284,9 @@ This constitution defines the engineering standards for the repository.
 
 Any amendment shall:
 
-* Update this document
-* Increment the constitution version following semantic versioning
-* Document the reason for the change
+- Update this document
+- Increment the constitution version following semantic versioning
+- Document the reason for the change
 
 All pull requests shall be reviewed for compliance with these principles.
 

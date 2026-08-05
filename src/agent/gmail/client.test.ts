@@ -155,11 +155,9 @@ describe('GmailClient token refresh', () => {
 
 describe('GmailClient.listMessages', () => {
   it('lists messages with only the required userId param by default', async () => {
-    const list = vi
-      .fn()
-      .mockResolvedValue({
-        data: { messages: [{ id: 'm1', threadId: 't1' }], resultSizeEstimate: 1 },
-      });
+    const list = vi.fn().mockResolvedValue({
+      data: { messages: [{ id: 'm1', threadId: 't1' }], resultSizeEstimate: 1 },
+    });
     const client = new GmailClient({}, createFakeGmail({ list }));
 
     const result = await client.listMessages();

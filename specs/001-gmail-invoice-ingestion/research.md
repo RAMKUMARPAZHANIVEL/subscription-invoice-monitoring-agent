@@ -18,10 +18,11 @@ unattended service. Read-only scope satisfies least privilege (Principle IV) sin
 are never written — processing state lives entirely in Postgres.
 
 **Alternatives considered**:
-- *Domain-wide delegation (service account)*: Cleaner for unattended refresh (no refresh-token
+
+- _Domain-wide delegation (service account)_: Cleaner for unattended refresh (no refresh-token
   rotation risk), but requires Google Workspace and a domain admin to grant delegation — an
   assumption not supported by the spec. Revisit if/when the account is confirmed to be Workspace.
-- *Gmail `gmail.modify` scope with label-based tracking*: Rejected — would duplicate the
+- _Gmail `gmail.modify` scope with label-based tracking_: Rejected — would duplicate the
   processing-history responsibility across Gmail labels and Postgres, and needs a wider, riskier
   scope for no added benefit given IX/idempotency is already handled by the DB.
 
@@ -32,18 +33,19 @@ domains/addresses (e.g., `from:(billing@github.com OR invoices@aws.amazon.com ..
 messages newer than the agent's first-activation timestamp (per FR-011 — no historical backfill).
 Each scheduled run queries for messages since the last successful run's high-water mark.
 
-**Rationale**: Keeps invoice *discovery* deterministic (Principle III) — AI is not used to decide
+**Rationale**: Keeps invoice _discovery_ deterministic (Principle III) — AI is not used to decide
 "is this an invoice," only to extract structured fields once a candidate email is already matched
 to a configured vendor. This also directly satisfies FR-002 (config-driven vendor identification)
 and keeps false-positive risk low, since only mail from configured vendor senders is even
 considered.
 
 **Alternatives considered**:
-- *AI-based email classification across the entire inbox*: More flexible (could catch invoices
+
+- _AI-based email classification across the entire inbox_: More flexible (could catch invoices
   from not-yet-configured vendors) but violates Principle III's requirement that core discovery
   stay deterministic, and risks false positives across unrelated mail. Rejected for Phase 1;
   configured-vendor-only matching is the documented Assumption in the spec.
-- *Gmail push notifications (Cloud Pub/Sub watch)*: Real-time, but adds infrastructure (Pub/Sub
+- _Gmail push notifications (Cloud Pub/Sub watch)_: Real-time, but adds infrastructure (Pub/Sub
   topic, watch renewal every 7 days) for no benefit given FR-010 only requires a daily cadence.
   Rejected as unnecessary complexity (Principle XII).
 
@@ -57,9 +59,10 @@ build), and sufficient for the common case of digitally-generated vendor invoice
 images). Handles the two named formats (PDF and CSV) in FR-003 without adding a heavy dependency.
 
 **Alternatives considered**:
-- *`pdfjs-dist`*: More capable (rendering, not just text extraction) but heavier and intended for
+
+- _`pdfjs-dist`_: More capable (rendering, not just text extraction) but heavier and intended for
   browser/rendering use cases we don't need.
-- *OCR (e.g., Cloud Vision)*: Needed only for scanned/image-only PDFs, which the spec's Edge Cases
+- _OCR (e.g., Cloud Vision)_: Needed only for scanned/image-only PDFs, which the spec's Edge Cases
   and Risks explicitly acknowledge as a known failure mode to surface diagnosably, not solve in
   Phase 1. Deferred.
 
@@ -87,12 +90,13 @@ which is exactly this step. Using structured tool-use output (rather than free-t
 keeps the AI boundary tightly typed and testable.
 
 **Alternatives considered**:
-- *Regex/rule-based extraction per vendor template*: More deterministic, but brittle against the
+
+- _Regex/rule-based extraction per vendor template_: More deterministic, but brittle against the
   Risk already identified in the spec ("vendor invoice formats change over time") and would need a
   bespoke parser per vendor, contradicting configuration-over-code (Principle V) for anything
   beyond field position. Reserved as a possible per-vendor optimization later, not the Phase 1
   default.
-- *Non-Claude LLM provider*: No other provider key exists in this codebase; introducing one adds
+- _Non-Claude LLM provider_: No other provider key exists in this codebase; introducing one adds
   an unjustified new dependency/secret with no stated requirement (Principle XII).
 
 ## 6. PostgreSQL hosting for Cloud Run
@@ -124,11 +128,12 @@ service owns directly" (satisfied by Cloud Storage + Postgres), not "the contain
 This resolution is also recorded in the spec's Assumptions section.
 
 **Alternatives considered**:
-- *Store attachment bytes directly in Postgres (`bytea`)*: Simpler (one system, one durability
+
+- _Store attachment bytes directly in Postgres (`bytea`)_: Simpler (one system, one durability
   guarantee) and would technically satisfy NFR-002. Rejected in favor of Cloud Storage because the
   constitution explicitly ratifies Cloud Storage as required technology, and keeping large binary
   blobs out of the primary OLTP database is standard practice that avoids future migration work.
-- *Literal Cloud Run local disk*: Rejected outright — does not survive restarts/redeploys,
+- _Literal Cloud Run local disk_: Rejected outright — does not survive restarts/redeploys,
   directly violates NFR-002.
 
 ## 8. Scheduling mechanism

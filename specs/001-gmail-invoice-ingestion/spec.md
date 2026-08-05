@@ -97,7 +97,7 @@ Exclude:
 - Backfilling the pre-existing mailbox history — only emails received after the agent is first
   activated are processed (see Assumptions)
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Automatic invoice discovery and extraction (Priority: P1)
 
@@ -188,7 +188,7 @@ summary (emails scanned, invoices processed, failures) even when there are zero 
 - How does the system handle attachments that cannot be parsed (corrupted, password-protected, or
   a scanned image with no extractable text)?
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -274,7 +274,7 @@ summary (emails scanned, invoices processed, failures) even when there are zero 
   scoped to invoice understanding, vendor identification, and data extraction only.
 - Must not implement budget alerts, dashboards, forecasting, or anomaly detection in this phase.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
