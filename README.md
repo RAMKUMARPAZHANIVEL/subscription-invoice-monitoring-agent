@@ -74,9 +74,11 @@ try/catch.
 
 Vendors are rows in the `Vendor` table (`name`, `senderPatterns`, `subjectPatterns`,
 `defaultSubscriptionType`, `enabled`), not code. Adding a new vendor to monitor means inserting a
-row (e.g. via `pnpm prisma studio` or a seed script) — no deployment required. Discovery only
-searches for vendors with `enabled = true`; matching is a case-insensitive substring check against
-sender (required) and subject (optional — omit `subjectPatterns` to match on sender alone).
+row (e.g. via `pnpm db:studio` or editing `prisma/seed.ts` and re-running `pnpm db:seed`) — no
+deployment required. Discovery only searches for vendors with `enabled = true`; matching is a
+case-insensitive substring check against sender (required) and subject (optional — omit
+`subjectPatterns` to match on sender alone). See [Seeding vendors](#seeding-vendors) for the
+default vendor list.
 
 ### Supported providers
 
@@ -128,15 +130,16 @@ Requires Node.js >=20 and [pnpm](https://pnpm.io/) (`packageManager: pnpm@9.15.0
 
 ```bash
 pnpm install
-cp .env.example .env          # then fill in the values — see Environment Variables below
-pnpm prisma migrate dev       # apply the Prisma schema to your local Postgres database
-pnpm run dev                  # start the server with hot reload (tsx watch), default port 8080
+cp .env.example .env  # then fill in the values — see Environment Variables below
+pnpm db:migrate       # apply the Prisma schema to your local Postgres database
+pnpm db:seed          # populate the Vendor table with the default vendor list
+pnpm run dev           # start the server with hot reload (tsx watch), default port 8080
 ```
 
-`pnpm prisma migrate dev` both applies existing migrations and lets you create a new one if you've
-changed `prisma/schema.prisma`; it also regenerates the Prisma client into `src/generated/prisma/`.
-For applying existing migrations only (CI, a fresh test database), use `pnpm prisma migrate deploy`
-instead — see [Testing](#testing).
+`pnpm db:migrate` (`prisma migrate dev`) both applies existing migrations and lets you create a new
+one if you've changed `prisma/schema.prisma`; it also regenerates the Prisma client into
+`src/generated/prisma/`. For applying existing migrations only (CI, a fresh test database), use
+`pnpm prisma migrate deploy` instead — see [Testing](#testing).
 
 You need a running PostgreSQL instance before either command; a disposable one via Docker:
 
@@ -148,15 +151,30 @@ docker run --name sima-db \
 
 ## Scripts
 
-| Script               | Purpose                                                           |
-| -------------------- | ----------------------------------------------------------------- |
-| `pnpm run dev`       | Run the server with hot reload                                    |
-| `pnpm run build`     | Compile TypeScript to `dist/`                                     |
-| `pnpm run start`     | Run the compiled server (`node dist/index.js`)                    |
-| `pnpm run lint`      | Lint the codebase (`lint:fix` to auto-fix)                        |
-| `pnpm run format`    | Format the codebase with Prettier (`format:check` to verify only) |
-| `pnpm run typecheck` | Type-check without emitting                                       |
-| `pnpm run test`      | Run the Vitest suite once (`test:watch` to watch)                 |
+| Script               | Purpose                                                                |
+| -------------------- | ---------------------------------------------------------------------- |
+| `pnpm run dev`       | Run the server with hot reload                                         |
+| `pnpm run build`     | Compile TypeScript to `dist/`                                          |
+| `pnpm run start`     | Run the compiled server (`node dist/index.js`)                         |
+| `pnpm run lint`      | Lint the codebase (`lint:fix` to auto-fix)                             |
+| `pnpm run format`    | Format the codebase with Prettier (`format:check` to verify only)      |
+| `pnpm run typecheck` | Type-check without emitting                                            |
+| `pnpm run test`      | Run the Vitest suite once (`test:watch` to watch)                      |
+| `pnpm db:migrate`    | Apply Prisma migrations to the local database (`prisma migrate dev`)   |
+| `pnpm db:generate`   | Regenerate the Prisma client into `src/generated/prisma/`              |
+| `pnpm db:reset`      | Drop and recreate the local database, reapply migrations, then re-seed |
+| `pnpm db:seed`       | Populate/update the `Vendor` table from `prisma/seed.ts`               |
+| `pnpm db:studio`     | Open Prisma Studio to browse/edit local data                           |
+
+### Seeding vendors
+
+`prisma/seed.ts` upserts the default vendor list (`Claude`, `GitHub`, `AWS`, `Jira`, `Tiny.cloud`,
+`Coderabbit`, `Greptile`, `CoreValue`) into the `Vendor` table — each entry sets `name`, `enabled`,
+`senderPatterns`, and `subjectPatterns` (see [Vendor configuration](#vendor-configuration)).
+`pnpm db:seed` runs `prisma db seed`, which invokes the command configured in `prisma.config.ts`
+(`migrations.seed: 'tsx prisma/seed.ts'`); it's also run automatically at the end of
+`pnpm db:reset`. Upserting by `name` (which is `@unique` on `Vendor`) makes the script safe to
+re-run — it updates existing rows rather than creating duplicates.
 
 ## Environment Variables
 
