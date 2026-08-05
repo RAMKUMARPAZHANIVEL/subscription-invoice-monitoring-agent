@@ -617,3 +617,202 @@ describe('runInvoiceCheck retry logic (integration, real Postgres)', () => {
     expect(history[2]?.errorReason).toMatch(/AiExtractionError.*API call failed/i);
   });
 });
+
+describe('runInvoiceCheck summary counts (integration, real Postgres)', () => {
+  let vendorId: string;
+  let baseDir: string;
+  let attachmentStore: InstanceType<typeof LocalAttachmentStore>;
+
+  const VALID_EXTRACTION = {
+    amount: '49.00',
+    currency: 'USD',
+    invoiceDate: '2026-06-01',
+    extractionConfidence: 'HIGH' as const,
+  };
+
+  const ATTACHMENT_CSV = 'description,amount\nSeats,49.00\n';
+  const VENDOR_SENDER = 'billing@testvendor.example';
+
+  interface FixtureEmail {
+    gmailMessageId: string;
+    sender: string;
+    subject: string;
+    attachmentId: string;
+    filename: string;
+    mimeType: string;
+    data: Buffer;
+  }
+
+  function fakeGmailClientForBatch(
+    emails: FixtureEmail[],
+  ): Pick<GmailClient, 'listMessages' | 'getMessage' | 'getAttachment'> {
+    return {
+      listMessages: vi.fn().mockResolvedValue({
+        messages: emails.map((email) => ({ id: email.gmailMessageId, threadId: 'thread-1' })),
+      }),
+      getMessage: vi.fn().mockImplementation((messageId: string) => {
+        const email = emails.find((candidate) => candidate.gmailMessageId === messageId);
+        if (!email) throw new Error(`Unexpected messageId: ${messageId}`);
+        return {
+          id: email.gmailMessageId,
+          threadId: 'thread-1',
+          internalDate: String(Date.now()),
+          payload: {
+            mimeType: 'multipart/mixed',
+            headers: [
+              { name: 'From', value: email.sender },
+              { name: 'Subject', value: email.subject },
+            ],
+            parts: [
+              {
+                filename: email.filename,
+                mimeType: email.mimeType,
+                body: { attachmentId: email.attachmentId },
+              },
+            ],
+          },
+        };
+      }),
+      getAttachment: vi.fn().mockImplementation((_messageId: string, attachmentId: string) => {
+        const email = emails.find((candidate) => candidate.attachmentId === attachmentId);
+        if (!email) throw new Error(`Unexpected attachmentId: ${attachmentId}`);
+        return {
+          size: email.data.length,
+          data: email.data.toString('base64url'),
+        };
+      }),
+    };
+  }
+
+  beforeEach(async () => {
+    baseDir = await mkdtemp(path.join(tmpdir(), 'sima-invoicemonitor-summary-test-'));
+    attachmentStore = new LocalAttachmentStore(baseDir);
+    extractInvoiceDataMock.mockReset().mockResolvedValue(VALID_EXTRACTION);
+
+    const vendor = await prisma.vendor.create({
+      data: {
+        name: `Test Vendor ${randomUUID()}`,
+        senderPatterns: [VENDOR_SENDER],
+        subjectPatterns: [],
+      },
+    });
+    vendorId = vendor.id;
+  });
+
+  afterEach(async () => {
+    await rm(baseDir, { recursive: true, force: true });
+    await prisma.processingHistoryEntry.deleteMany({ where: { sourceEmail: { vendorId } } });
+    await prisma.attachment.deleteMany({ where: { sourceEmail: { vendorId } } });
+    await prisma.invoice.deleteMany({ where: { vendorId } });
+    await prisma.sourceEmail.deleteMany({ where: { vendorId } });
+    await prisma.vendor.delete({ where: { id: vendorId } });
+  });
+
+  it('computes scanned/processed/duplicates/failures/skipped and a positive duration for a mixed batch of 5 emails', async () => {
+    const emailProcessed1: FixtureEmail = {
+      gmailMessageId: `msg-p1-${randomUUID()}`,
+      sender: VENDOR_SENDER,
+      subject: 'Your invoice 1',
+      attachmentId: 'att-p1',
+      filename: 'invoice-1.csv',
+      mimeType: 'text/csv',
+      data: Buffer.from(ATTACHMENT_CSV),
+    };
+    const emailProcessed2: FixtureEmail = {
+      gmailMessageId: `msg-p2-${randomUUID()}`,
+      sender: VENDOR_SENDER,
+      subject: 'Your invoice 2',
+      attachmentId: 'att-p2',
+      filename: 'invoice-2.csv',
+      mimeType: 'text/csv',
+      data: Buffer.from(ATTACHMENT_CSV),
+    };
+    // Zero-byte "PDF" is rejected by extractPdfText as unparseable (see the per-email isolation
+    // test above) — a deterministic, non-recoverable failure on attempt 1.
+    const emailFailed: FixtureEmail = {
+      gmailMessageId: `msg-f-${randomUUID()}`,
+      sender: VENDOR_SENDER,
+      subject: 'Your invoice (broken)',
+      attachmentId: 'att-f',
+      filename: 'invoice-broken.pdf',
+      mimeType: 'application/pdf',
+      data: Buffer.alloc(0),
+    };
+    // Sender matches no configured vendor, so findMatchingVendor returns undefined and the email
+    // is recorded SKIPPED_NOT_INVOICE.
+    const emailSkippedNotInvoice: FixtureEmail = {
+      gmailMessageId: `msg-s-${randomUUID()}`,
+      sender: 'no-vendor-match@unrelated.example',
+      subject: 'Not an invoice',
+      attachmentId: 'att-s',
+      filename: 'newsletter.csv',
+      mimeType: 'text/csv',
+      data: Buffer.from(ATTACHMENT_CSV),
+    };
+    const emailDuplicate: FixtureEmail = {
+      gmailMessageId: `msg-d-${randomUUID()}`,
+      sender: VENDOR_SENDER,
+      subject: 'Your invoice (already processed)',
+      attachmentId: 'att-d',
+      filename: 'invoice-d.csv',
+      mimeType: 'text/csv',
+      data: Buffer.from(ATTACHMENT_CSV),
+    };
+
+    // Pre-seed emailDuplicate as already-processed (SourceEmail + Invoice + a prior PROCESSED
+    // ProcessingHistoryEntry) so this run's evaluation of it takes the SKIPPED_DUPLICATE branch.
+    const priorSourceEmail = await prisma.sourceEmail.create({
+      data: {
+        gmailMessageId: emailDuplicate.gmailMessageId,
+        vendorId,
+        sender: emailDuplicate.sender,
+        subject: emailDuplicate.subject,
+        receivedAt: new Date(),
+      },
+    });
+    const priorInvoice = await prisma.invoice.create({
+      data: {
+        sourceEmailId: priorSourceEmail.id,
+        vendorId,
+        amount: VALID_EXTRACTION.amount,
+        currency: VALID_EXTRACTION.currency,
+        invoiceDate: new Date(VALID_EXTRACTION.invoiceDate),
+        extractionConfidence: VALID_EXTRACTION.extractionConfidence,
+      },
+    });
+    await prisma.processingHistoryEntry.create({
+      data: {
+        sourceEmailId: priorSourceEmail.id,
+        invoiceId: priorInvoice.id,
+        outcome: 'PROCESSED',
+        attemptNumber: 1,
+        evaluatedAt: new Date(),
+      },
+    });
+
+    const gmailClient = fakeGmailClientForBatch([
+      emailProcessed1,
+      emailProcessed2,
+      emailFailed,
+      emailSkippedNotInvoice,
+      emailDuplicate,
+    ]);
+
+    const summary = await runInvoiceCheck({ gmailClient, attachmentStore });
+
+    expect(summary.emailsScanned).toBe(5);
+    expect(summary.invoicesProcessed).toBe(2);
+    expect(summary.failures).toBe(1);
+    expect(summary.duplicateEmails).toBe(1);
+    // `skipped` counts every SKIPPED_* outcome (both SKIPPED_NOT_INVOICE and SKIPPED_DUPLICATE —
+    // see the duplicate-detection branch in processCandidateEmail), so it's the not-invoice skip
+    // plus the duplicate, not a bucket disjoint from `duplicateEmails`.
+    expect(summary.skipped).toBe(2);
+
+    expect(summary.durationMs).toBeGreaterThan(0);
+    const startedAtMs = new Date(summary.startedAt).getTime();
+    const finishedAtMs = new Date(summary.finishedAt).getTime();
+    expect(finishedAtMs).toBeGreaterThan(startedAtMs);
+    expect(summary.durationMs).toBe(finishedAtMs - startedAtMs);
+  });
+});

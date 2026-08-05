@@ -174,7 +174,7 @@ Scenario 3).
       (per-email isolation), in `src/agent/invoiceMonitor.test.ts`
 - [x] T035 [P] [US3] Unit test: a recoverable error is retried up to the configured limit, then
       recorded as `FAILED` with an `errorReason`, in `src/agent/invoiceMonitor.test.ts`
-- [ ] T036 [P] [US3] Unit test: the run summary (scanned/processed/failures/duration) is computed
+- [x] T036 [P] [US3] Unit test: the run summary (scanned/processed/failures/duration) is computed
       correctly for a mixed batch of outcomes, in `src/agent/invoiceMonitor.test.ts`
 
 ### Implementation for User Story 3
