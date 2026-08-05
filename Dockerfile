@@ -12,6 +12,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 FROM deps AS build
 COPY . .
+RUN pnpm run db:generate
 RUN pnpm run build
 
 FROM base AS production-deps

@@ -25,6 +25,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - run: pnpm run db:generate
+
       - run: pnpm run format:check
 
       - run: pnpm run lint
