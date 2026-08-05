@@ -10,13 +10,16 @@ shapes referenced below.
 - A local PostgreSQL instance (or a disposable test database) reachable via `DATABASE_URL`
 - A Gmail OAuth2 refresh token for the admin account under test (research.md #1), plus its client
   ID/secret, set via env vars
-- An `ANTHROPIC_API_KEY` with access to the Claude model used for extraction
+- A `COREVALUE_API_KEY` (CoreValue AI gateway bearer token) — required regardless of whether
+  `INVOICE_EXTRACTION_PROVIDER` is `claude` or `bedrock`; see README.md's Environment Variables
+  section for the full breakdown of the AI provider vars
 - For local runs only: `ATTACHMENT_STORE_DRIVER=local` to use `LocalAttachmentStore` instead of
-  GCS (research.md #7); omit this in any deployed environment
+  GCS (research.md #7); omit this in any deployed environment. `GCS_BUCKET_NAME` still must be set
+  to a placeholder value even when using `local` (the env schema requires it unconditionally).
 
 ```bash
 pnpm install
-cp .env.example .env   # fill in DATABASE_URL, Gmail OAuth vars, ANTHROPIC_API_KEY
+cp .env.example .env   # fill in DATABASE_URL, Gmail OAuth vars, COREVALUE_API_KEY
 pnpm prisma migrate deploy
 ```
 
