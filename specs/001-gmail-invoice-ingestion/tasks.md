@@ -209,6 +209,57 @@ failure visibility is in place.
 
 ---
 
+## Phase 7: GCP Production Deployment
+
+**Purpose**: Stand up and validate the real production environment now that the ingestion
+pipeline (Phases 1-6) is code-complete
+
+**⚠️ NOTE**: This is always the last phase. If future feature work adds new phases to this file,
+insert them before Phase 7 — production deployment stays last.
+
+- [ ] T201 Create Terraform configuration for the required GCP infrastructure (Artifact Registry,
+      Cloud Run service, Cloud SQL connectivity via the Cloud SQL Auth Proxy/Unix-socket connector
+      — no dedicated custom VPC — Cloud Scheduler job, service accounts and IAM bindings) in
+      `terraform/main.tf`, `terraform/variables.tf`, `terraform/outputs.tf`; size Cloud Run
+      (scale-to-zero min instances) and Cloud SQL (smallest tier that fits this workload) for
+      minimal cost
+- [ ] T202 Configure production application secrets (`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`,
+      `GMAIL_REFRESH_TOKEN`, `GMAIL_ADMIN_EMAIL`, `ANTHROPIC_API_KEY`) in GCP Secret Manager and
+      wire them into the Cloud Run service in `terraform/secrets.tf` (depends on T201).
+      `DATABASE_URL` is not configured here — it depends on the Cloud SQL instance created in T203.
+- [ ] T203 Set up production PostgreSQL (Cloud SQL instance, database, user) via Terraform in
+      `terraform/database.tf`, store the resulting connection string as the `DATABASE_URL` secret
+      in Secret Manager and wire it into the Cloud Run service, then apply the schema with
+      `pnpm prisma migrate deploy` (depends on T201)
+- [ ] T204 Configure the production GCS bucket for attachment storage (`GCS_BUCKET_NAME`,
+      lifecycle rules, IAM binding for the Cloud Run service account) in `terraform/storage.tf`
+      (depends on T201)
+- [ ] T205 Deploy the invoice monitor to Cloud Run using the existing CI/CD workflow
+      (`.github/workflows/deploy.yml`) to build/push the image and roll out new revisions, while
+      Cloud Run service configuration (env vars, secrets, Cloud SQL connection, scaling) stays
+      owned by Terraform — update the workflow so it deploys images without redefining settings
+      Terraform already manages, avoiding drift between the two — and confirm `GET /healthz`
+      returns `200` (depends on T202, T203, T204)
+- [ ] T206 Configure Gmail invoice ingestion for the production account (OAuth consent, refresh
+      token generation, seed production `Vendor` rows via `pnpm db:seed`) (depends on T205)
+- [ ] T207 Verify AI invoice extraction against real production invoice emails and confirm
+      `Invoice` rows match their source PDF/CSV attachments (depends on T206)
+- [ ] T208 Configure the daily Cloud Scheduler job via Terraform (`terraform/scheduler.tf`, driven
+      by `SCHEDULER_SCHEDULE`/`SCHEDULER_TIME_ZONE` variables) for production, remove the
+      duplicate scheduler-creation step from `.github/workflows/deploy.yml` so Terraform is the
+      sole owner of the job, and confirm a manual `gcloud scheduler jobs run` triggers a
+      successful ingestion (depends on T201, T205)
+- [ ] T209 Run the `quickstart.md` validation scenarios end-to-end against production and record
+      results in `specs/001-gmail-invoice-ingestion/production-validation.md` (depends on T206,
+      T207, T208)
+- [ ] T210 Production acceptance & handover: confirm monitoring/alerting is in place, document the
+      operational runbook and rollback steps, and record sign-off in
+      `specs/001-gmail-invoice-ingestion/production-handover.md` (depends on T209)
+
+**Checkpoint**: Production environment is live, verified end-to-end, and handed over.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -221,6 +272,8 @@ failure visibility is in place.
 - **User Story 3 (Phase 5)**: Depends on Foundational; builds on the write path US2 extends
   (T032)
 - **Polish (Phase 6)**: Depends on all desired user stories being complete
+- **GCP Production Deployment (Phase 7)**: Depends on Phase 6 (Polish) being complete — always the
+  last phase, regardless of any feature phases added later
 
 ### User Story Dependencies
 
