@@ -165,6 +165,7 @@ resource "google_cloud_run_v2_service" "app" {
   depends_on = [
     google_project_service.required,
     google_project_iam_member.cloud_run_sql_client,
+    google_secret_manager_secret_iam_member.cloud_run_secret_access,
   ]
 }
 

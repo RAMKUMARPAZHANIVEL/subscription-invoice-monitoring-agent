@@ -223,9 +223,11 @@ insert them before Phase 7 — production deployment stays last.
       `terraform/main.tf`, `terraform/variables.tf`, `terraform/outputs.tf`; size Cloud Run
       (scale-to-zero min instances) and Cloud SQL (smallest tier that fits this workload) for
       minimal cost
-- [ ] T202 Configure production application secrets (`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`,
-      `GMAIL_REFRESH_TOKEN`, `GMAIL_ADMIN_EMAIL`, `ANTHROPIC_API_KEY`) in GCP Secret Manager and
-      wire them into the Cloud Run service in `terraform/secrets.tf` (depends on T201).
+- [x] T202 Configure production application secrets (`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`,
+      `GMAIL_REFRESH_TOKEN`, `GMAIL_ADMIN_EMAIL`, `COREVALUE_API_KEY` — not `ANTHROPIC_API_KEY`,
+      which `src/config/env.ts` only reads as an optional fallback; `COREVALUE_API_KEY` is the
+      env var actually required at startup) in GCP Secret Manager and wire them into the Cloud Run
+      service in `terraform/secrets.tf` (depends on T201).
       `DATABASE_URL` is not configured here — it depends on the Cloud SQL instance created in T203.
 - [ ] T203 Set up production PostgreSQL (Cloud SQL instance, database, user) via Terraform in
       `terraform/database.tf`, store the resulting connection string as the `DATABASE_URL` secret

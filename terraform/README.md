@@ -5,8 +5,8 @@ Terraform configuration for the Invoice Monitor's GCP infrastructure. This confi
 project shared with Paperclip or any other workload; that project-level boundary is what keeps
 this infrastructure isolated, on top of the `labels` applied to every resource here.
 
-Provisioned by this configuration (T201 — see `specs/001-gmail-invoice-ingestion/tasks.md` Phase
-7 for the full rollout sequence):
+Provisioned by this configuration (T201/T202 — see `specs/001-gmail-invoice-ingestion/tasks.md`
+Phase 7 for the full rollout sequence):
 
 - Required API enablement
 - Artifact Registry (Docker) repository
@@ -14,12 +14,16 @@ Provisioned by this configuration (T201 — see `specs/001-gmail-invoice-ingesti
   (no custom VPC)
 - Cloud Run runtime service account (`roles/cloudsql.client`)
 - Cloud Scheduler invoker service account, granted `roles/run.invoker` on the Cloud Run service
+- Secret Manager containers for the application secrets Cloud Run needs (`GMAIL_CLIENT_ID`,
+  `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_ADMIN_EMAIL`, `COREVALUE_API_KEY`), with
+  `roles/secretmanager.secretAccessor` granted to the Cloud Run runtime identity (`secrets.tf`,
+  T202). Terraform never sets the secret _values_ — see `secrets.tf` for how to populate them via
+  `gcloud secrets versions add` after `terraform apply`.
 
 Deliberately **not** provisioned here — later tasks in the same Phase 7 sequence own these, using
 the outputs from this config:
 
 - Cloud SQL instance/database/user + `DATABASE_URL` secret (T203)
-- Application secrets in Secret Manager (T202)
 - GCS bucket for attachments (T204)
 - The Cloud Scheduler job itself (T208)
 

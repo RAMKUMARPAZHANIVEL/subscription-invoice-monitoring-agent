@@ -96,7 +96,7 @@ variable "sql_availability_type" {
 }
 
 variable "secret_env_vars" {
-  description = "Map of Cloud Run environment variable name -> Secret Manager secret ID it should be sourced from (:latest version). Secrets themselves are created in T202/T203; this only wires the Cloud Run service to read from them by name, so `terraform plan` succeeds today and the secrets can be populated independently without changing this file."
+  description = "Map of Cloud Run environment variable name -> Secret Manager secret ID it should be sourced from (:latest version). The secret containers for every entry except DATABASE_URL are created by secrets.tf (T202) with IAM access granted to the Cloud Run runtime identity; DATABASE_URL's container is created by T203 once the Cloud SQL connection string exists. Actual secret *values* are never set here — see secrets.tf for how to populate them out-of-band."
   type        = map(string)
   default = {
     DATABASE_URL        = "sima-database-url"

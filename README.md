@@ -499,30 +499,34 @@ Required repository configuration for this workflow:
 
 ### Secret Manager
 
-`deploy.yml` builds and deploys the image but does **not** currently set the service's runtime
-environment variables — that (and wiring them from Secret Manager) is a one-time manual step per
-environment, done before or after the first deploy:
+Secret containers and the Cloud Run wiring to them are owned by Terraform, not manual `gcloud`
+commands — `terraform/secrets.tf` (T202) creates the Secret Manager container for each application
+secret and grants the Cloud Run runtime service account `roles/secretmanager.secretAccessor` on it;
+`terraform/main.tf` wires each one onto the Cloud Run service by name (`var.secret_env_vars`).
+`DATABASE_URL` (`sima-database-url`) is the one exception — its container is created by the Cloud
+SQL setup in T203, not T202. Don't run `gcloud run services update --set-secrets`/`--set-env-vars`
+by hand; it'll drift from what `terraform plan` expects on the next apply.
+
+Terraform only creates the secret _containers_ — it never sets secret _values_, since those must
+never live in source control or Terraform state as plain HCL. After `terraform apply`, populate
+each one out-of-band:
 
 ```bash
-# Create a secret for each sensitive value (repeat per variable)
-printf '%s' "$DATABASE_URL" | gcloud secrets create sima-database-url --data-file=-
-printf '%s' "$GMAIL_REFRESH_TOKEN" | gcloud secrets create sima-gmail-refresh-token --data-file=-
-printf '%s' "$COREVALUE_API_KEY" | gcloud secrets create sima-corevalue-api-key --data-file=-
-# ...one per remaining required secret (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_ADMIN_EMAIL,
-# GCS_BUCKET_NAME)
-
-# Wire secrets + plain env vars onto the Cloud Run service
-gcloud run services update subscription-invoice-monitoring-agent \
-  --region "$GCP_REGION" \
-  --set-secrets DATABASE_URL=sima-database-url:latest,GMAIL_REFRESH_TOKEN=sima-gmail-refresh-token:latest,COREVALUE_API_KEY=sima-corevalue-api-key:latest \
-  --set-env-vars ATTACHMENT_STORE_DRIVER=gcs,INVOICE_EXTRACTION_PROVIDER=claude
+printf '%s' "$GMAIL_CLIENT_ID" | gcloud secrets versions add sima-gmail-client-id --data-file=-
+printf '%s' "$GMAIL_CLIENT_SECRET" | gcloud secrets versions add sima-gmail-client-secret --data-file=-
+printf '%s' "$GMAIL_REFRESH_TOKEN" | gcloud secrets versions add sima-gmail-refresh-token --data-file=-
+printf '%s' "$GMAIL_ADMIN_EMAIL" | gcloud secrets versions add sima-gmail-admin-email --data-file=-
+printf '%s' "$COREVALUE_API_KEY" | gcloud secrets versions add sima-corevalue-api-key --data-file=-
 ```
 
-Grant the Cloud Run service's runtime service account `roles/secretmanager.secretAccessor` on each
-secret so it can read them at startup. Since Cloud Run redeploys don't reapply `--set-secrets`
-unless you re-specify them, re-run (or script) the `gcloud run services update` command above after
-any deploy that changes required secrets — the workflow's `deploy-cloudrun` step only sets the
-image, not env vars, so it won't clobber existing service configuration.
+Non-sensitive env vars (`NODE_ENV`, `LOG_LEVEL`, `ATTACHMENT_STORE_DRIVER`,
+`INVOICE_EXTRACTION_PROVIDER`, `GCP_REGION`, `GOOGLE_CLOUD_PROJECT`, plus anything passed via
+`var.plain_env_vars`) are likewise set by Terraform (`terraform/main.tf`), not `gcloud run services
+update`. Cloud Run resolves an env-var-sourced secret (`version = "latest"` in the
+`secret_key_ref`) once, at container start — it does not live-update an already-running instance.
+Because this service scales to zero (`cloud_run_min_instances = 0`), the next cold start after
+`gcloud secrets versions add` picks up the new value; adding or removing a secret _binding_ itself
+still requires `terraform apply`.
 
 ### Prisma migrations
 
