@@ -1,0 +1,4 @@
+# Copy to backend.hcl (gitignored) and fill in real values, then:
+#   terraform init -backend-config=backend.hcl
+bucket = "REPLACE_WITH_TERRAFORM_STATE_BUCKET_NAME"
+prefix = "invoice-monitor/production"

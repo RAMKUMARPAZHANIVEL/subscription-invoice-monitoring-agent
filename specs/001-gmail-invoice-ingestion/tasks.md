@@ -217,7 +217,7 @@ pipeline (Phases 1-6) is code-complete
 **⚠️ NOTE**: This is always the last phase. If future feature work adds new phases to this file,
 insert them before Phase 7 — production deployment stays last.
 
-- [ ] T201 Create Terraform configuration for the required GCP infrastructure (Artifact Registry,
+- [x] T201 Create Terraform configuration for the required GCP infrastructure (Artifact Registry,
       Cloud Run service, Cloud SQL connectivity via the Cloud SQL Auth Proxy/Unix-socket connector
       — no dedicated custom VPC — Cloud Scheduler job, service accounts and IAM bindings) in
       `terraform/main.tf`, `terraform/variables.tf`, `terraform/outputs.tf`; size Cloud Run
