@@ -16,6 +16,7 @@ vi.mock('../config/env.js', () => ({
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     DATABASE_URL:
+      process.env.DATABASE_URL ??
       'postgresql://app_user:your_password@localhost:5433/subscription_invoice_dev?schema=public',
     ANTHROPIC_API_KEY: 'test-anthropic-key',
     GMAIL_CLIENT_ID: 'test-client-id',
