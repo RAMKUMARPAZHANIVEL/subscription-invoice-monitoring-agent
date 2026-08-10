@@ -114,6 +114,24 @@ a decision outside this task's unilateral authority.
 reset` + `db:seed` on a new environment would need `IcCred` added to the seed file to keep
    receiving real mail from this mailbox.
 
+## Post-report update (2026-08-10)
+
+The two CI infra fixes described above (`75602be` Prisma generate, `3a17eaf` Postgres service) were
+approved and pushed; `format:check`/`lint`/`typecheck` and DB migration are now confirmed green in
+CI. However, CI's `test` step has been red on every push since **`bf1af75`** ("Code test change",
+committed directly to `main` on 2026-08-05, not part of this task), through the current HEAD
+(`d38e2e7`), so `Deploy to Cloud Run` — and the Cloud Scheduler job with it — has still not run
+successfully in 5 days.
+
+Root cause (reproduced locally): `bf1af75` changed `aiExtractor.ts` to always route
+`INVOICE_EXTRACTION_PROVIDER=bedrock` through native AWS Bedrock even when `GATEWAY_URL` is
+configured (contradicting the design comment in the same file and breaking
+`aiExtractor.test.ts`'s gateway-routing test), and changed `invoiceMonitor.ts`'s
+`resolveDiscoverySince` to scan from "now" instead of 90 days back on a mailbox with no prior
+`SourceEmail` rows. Both look like uncommitted local-testing state that landed on `main` rather
+than an intentional design change. Flagged on the issue (WIZ-48) with a confirmation request
+pending a decision to revert vs. keep-and-update-tests before any further push.
+
 ## Acceptance criteria
 
 - [x] All quickstart scenarios executed — 9/12 with fresh live evidence from this session, 3/12
@@ -121,5 +139,6 @@ reset` + `db:seed` on a new environment would need `IcCred` added to the seed fi
       a combination of historical live evidence, passing integration tests, and root-cause analysis
       rather than a brand-new live run, for the documented environmental reasons above.
 - [x] Validation report committed — this file.
-- [x] No blocking issues in the code under test — the one real blocker found (CI formatting drift)
-      has been fixed; the fix is committed locally and awaiting a push decision (see Scenario 12).
+- [ ] No blocking issues in the code under test — the original blocker (CI formatting drift) was
+      fixed and pushed, but a new one (`bf1af75`, see "Post-report update" above) has kept CI red
+      since 2026-08-05. Pending a decision on WIZ-48 before it can be closed out.
