@@ -163,6 +163,47 @@ warnings), `pnpm run format:check` (clean), `pnpm vitest run src/agent/extractio
 unaffected by either change — they were already passing before `bf1af75` and neither hunk touches
 retry/persistence logic.
 
+## Second fix applied + CI green (2026-08-10)
+
+After the `bf1af75` revert above, CI's `test` step was still red for a third, unrelated reason:
+`src/agent/invoiceMonitor.test.ts` and `src/storage/prisma.test.ts` hardcoded
+`DATABASE_URL: 'postgresql://app_user:...@localhost:5433/...'` inside their `vi.mock('../config/env.js', ...)`
+calls, ignoring whatever `DATABASE_URL` CI's provisioned Postgres service actually exports
+(`localhost:5432/subscription_invoice_test`). Every DB-touching test in both files failed with
+`ECONNREFUSED` — reproduced deterministically on two separate CI runs, 10 tests each time.
+
+Approved via a `request_confirmation` interaction on WIZ-48 (`fix-hardcoded-test-db-url`,
+accepted 2026-08-10T14:31Z). Fix applied in commit `844af61`: both files now read
+`process.env.DATABASE_URL ?? '<existing hardcoded fallback>'`, so CI's job-level env var flows
+through while local devs without it keep the existing default. Verified the pass-through works by
+setting `DATABASE_URL` to a deliberately-unreachable address locally and confirming the test
+connection error changed to that address instead of the hardcoded `localhost:5433`.
+
+Pushed to `origin/main` (`844af61`). **CI run 37 (`31398995091`) completed with `conclusion:
+success`** — the first fully green CI run on `main` since `a205f7c`, over 5 days ago. All four
+gates (`format:check` → `lint` → `typecheck` → `test`) pass, including the two previously-red
+files (146/146 tests now expected green in CI's real-Postgres environment).
+
+## New finding: Deploy to Cloud Run fails at GCP auth (2026-08-10) — blocking
+
+CI going green triggered `Deploy to Cloud Run` (run `31399124892`) for the first time in 5+ days.
+It **failed** at the `google-github-actions/auth@v2` step (job step 3 of 9; all later steps —
+build/push image, deploy, Cloud Scheduler job creation — were skipped as a result). This step
+authenticates to GCP via Workload Identity Federation using two GitHub repo secrets:
+`GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` (`.github/workflows/deploy.yml:29-32`).
+
+This sandbox has no GitHub token with log-read access (`Must have admin rights to Repository`) and
+no GCP console/IAM access, so the exact auth error text couldn't be pulled — but the failure
+signature (fails at `auth@v2` itself, before any gcloud/Docker command runs) points at one of:
+the WIF provider or pool being missing/disabled, its attribute-condition no longer matching this
+repo, the service account no longer granting the GitHub identity impersonation rights, or one of
+the two secrets being stale/absent. This is a GCP IAM / GitHub Actions secrets configuration
+issue outside the application code and outside what this task's access can fix or even fully
+diagnose.
+
+**Scenario 12 (Scheduler) cannot be validated live until this is resolved** — the Cloud Scheduler
+job has still never been (re)provisioned from current `main`.
+
 ## Acceptance criteria
 
 - [x] All quickstart scenarios executed — 9/12 with fresh live evidence from this session, 3/12
@@ -170,5 +211,11 @@ retry/persistence logic.
       a combination of historical live evidence, passing integration tests, and root-cause analysis
       rather than a brand-new live run, for the documented environmental reasons above.
 - [x] Validation report committed — this file.
-- [x] No blocking issues in the code under test — the `bf1af75` CI regression (Post-report
-      update, above) is fixed as of the "Fix applied" section above and pending push.
+- [x] No blocking issues in the _code_ under test — both CI regressions (`bf1af75` behavior
+      revert, hardcoded test `DATABASE_URL`) are fixed, pushed, and CI is green on `main` for the
+      first time in 5+ days.
+- [ ] **Blocking issue outside the code**: `Deploy to Cloud Run`'s GCP Workload Identity
+      Federation auth step is failing (see above), so Scenario 12 and the live Cloud Scheduler job
+      remain unvalidated. Needs a human with GitHub repo-secrets admin + GCP IAM access to inspect
+      `GCP_WORKLOAD_IDENTITY_PROVIDER` / `GCP_SERVICE_ACCOUNT` and the WIF pool/provider config,
+      then re-run the `Deploy to Cloud Run` workflow.
