@@ -155,17 +155,11 @@ function getDefaultAttachmentStore(): AttachmentStore {
  * backfill of pre-existing mailbox history).
  */
 async function resolveDiscoverySince(): Promise<Date> {
-  const _latest = await prisma.sourceEmail.findFirst({
+  const latest = await prisma.sourceEmail.findFirst({
     orderBy: { receivedAt: 'desc' },
     select: { receivedAt: true },
   });
-  return _latest?.receivedAt ?? new Date();
-
-  // First run: look back 90 days for testing purposes
-  // const since = new Date();
-  // since.setDate(since.getDate() - 90);
-  // logger.debug({ since: since.toISOString() }, 'Resolved discovery since');
-  // return since;
+  return latest?.receivedAt ?? new Date();
 }
 
 export function getHeader(payload: GmailMessagePart | undefined, name: string): string | undefined {

@@ -189,7 +189,7 @@ export async function extractInvoiceData(
   // surface) is in front of whichever backend model is configured, so it always takes the
   // Anthropic SDK path below regardless of INVOICE_EXTRACTION_PROVIDER. Native Bedrock
   // (Converse API via BedrockRuntimeClient) is only used when calling AWS directly.
-  if (!client && env.INVOICE_EXTRACTION_PROVIDER === 'bedrock') {
+  if (!client && env.INVOICE_EXTRACTION_PROVIDER === 'bedrock' && !env.GATEWAY_URL) {
     const { extractInvoiceDataWithBedrock } = await import('./bedrockExtractor.js');
     return extractInvoiceDataWithBedrock(input);
   }

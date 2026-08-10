@@ -132,6 +132,37 @@ configured (contradicting the design comment in the same file and breaking
 than an intentional design change. Flagged on the issue (WIZ-48) with a confirmation request
 pending a decision to revert vs. keep-and-update-tests before any further push.
 
+## Fix applied (2026-08-10)
+
+The revert was approved via a `request_confirmation` interaction on WIZ-48. Before applying it
+as-proposed, re-checked each hunk against the spec rather than reverting blindly:
+
+1. **`aiExtractor.ts` GATEWAY_URL precedence — reverted as proposed.** Restored
+   `!env.GATEWAY_URL` to the Bedrock-routing condition. This matches the in-file design comment,
+   the `aiExtractor.test.ts` gateway-routing test (now passing), and the known-issues note #5
+   above confirming gateway-precedence is the intended behavior. Confirmed root cause of the CI
+   `test` step failure; CI is expected to go green now.
+2. **`invoiceMonitor.ts` `resolveDiscoverySince` — proposed revert was incorrect, not applied.**
+   The confirmation prompt characterized `bf1af75`'s change (return `latest ?? now`, dropping the
+   90-day-lookback fallback) as a regression to undo. On inspection, this is backwards: **FR-011**
+   (`spec.md` line 219) explicitly requires "On first activation, the system MUST process only
+   invoice emails received from that point forward, and MUST NOT scan or process pre-existing
+   mailbox history" — and the function's own docstring (unchanged by `bf1af75`) already documents
+   the `now`-on-fresh-install behavior as FR-011-compliant. The 90-day lookback was itself the
+   deviation (its own comment even says "for testing purposes"). Reverting to it would have
+   reintroduced a spec violation to "fix" a commit that had actually restored spec-compliant
+   behavior. No test exercises this function directly, and it was not implicated in the CI
+   failure — only the `aiExtractor.ts` hunk was. Left the correct `now`-on-fresh-install behavior
+   in place and only removed the dead, since-commented-out 90-day code for clarity (no functional
+   change).
+
+Validated locally: `pnpm run typecheck` (clean), `pnpm run lint` (0 errors, 3 pre-existing
+warnings), `pnpm run format:check` (clean), `pnpm vitest run src/agent/extraction/aiExtractor.test.ts`
+(11/11 passing, including the previously-failing gateway-routing test). DB-dependent tests in
+`invoiceMonitor.test.ts` could not be re-run locally (no Postgres/Docker in this sandbox) but are
+unaffected by either change — they were already passing before `bf1af75` and neither hunk touches
+retry/persistence logic.
+
 ## Acceptance criteria
 
 - [x] All quickstart scenarios executed — 9/12 with fresh live evidence from this session, 3/12
@@ -139,6 +170,5 @@ pending a decision to revert vs. keep-and-update-tests before any further push.
       a combination of historical live evidence, passing integration tests, and root-cause analysis
       rather than a brand-new live run, for the documented environmental reasons above.
 - [x] Validation report committed — this file.
-- [ ] No blocking issues in the code under test — the original blocker (CI formatting drift) was
-      fixed and pushed, but a new one (`bf1af75`, see "Post-report update" above) has kept CI red
-      since 2026-08-05. Pending a decision on WIZ-48 before it can be closed out.
+- [x] No blocking issues in the code under test — the `bf1af75` CI regression (Post-report
+      update, above) is fixed as of the "Fix applied" section above and pending push.
