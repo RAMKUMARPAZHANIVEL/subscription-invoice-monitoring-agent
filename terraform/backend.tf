@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
   # Partial backend configuration: the state bucket is itself GCP infrastructure and must exist

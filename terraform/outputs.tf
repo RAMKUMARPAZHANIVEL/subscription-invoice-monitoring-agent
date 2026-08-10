@@ -22,3 +22,18 @@ output "scheduler_invoker_service_account_email" {
   description = "Email of the Cloud Scheduler invoker service account. Use as the OIDC service account when T208 creates the Cloud Scheduler job."
   value       = google_service_account.scheduler_invoker.email
 }
+
+output "sql_instance_connection_name" {
+  description = "Cloud SQL instance connection name (PROJECT:REGION:INSTANCE), e.g. for use with the Cloud SQL Auth Proxy when running `pnpm prisma migrate deploy` against production."
+  value       = google_sql_database_instance.main.connection_name
+}
+
+output "sql_database_name" {
+  description = "Name of the Invoice Monitor database on the Cloud SQL instance."
+  value       = google_sql_database.app.name
+}
+
+output "database_url_secret_id" {
+  description = "Secret Manager secret ID holding the production DATABASE_URL."
+  value       = google_secret_manager_secret.database_url.secret_id
+}

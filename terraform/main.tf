@@ -132,22 +132,18 @@ resource "google_cloud_run_v2_service" "app" {
         }
       }
 
-      dynamic "volume_mounts" {
-        for_each = var.sql_instance_connection_name != "" ? [1] : []
-        content {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
+      volume_mounts {
+        name       = "cloudsql"
+        mount_path = "/cloudsql"
       }
     }
 
-    dynamic "volumes" {
-      for_each = var.sql_instance_connection_name != "" ? [1] : []
-      content {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [var.sql_instance_connection_name]
-        }
+    # Cloud SQL instance itself is provisioned in database.tf (T203); referencing it directly
+    # here (rather than through a variable) means Terraform tracks the dependency automatically.
+    volumes {
+      name = "cloudsql"
+      cloud_sql_instance {
+        instances = [google_sql_database_instance.main.connection_name]
       }
     }
   }
@@ -166,6 +162,7 @@ resource "google_cloud_run_v2_service" "app" {
     google_project_service.required,
     google_project_iam_member.cloud_run_sql_client,
     google_secret_manager_secret_iam_member.cloud_run_secret_access,
+    google_secret_manager_secret_iam_member.cloud_run_database_url_access,
   ]
 }
 

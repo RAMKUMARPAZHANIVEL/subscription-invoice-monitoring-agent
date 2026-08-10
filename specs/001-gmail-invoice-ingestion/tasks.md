@@ -232,7 +232,16 @@ insert them before Phase 7 — production deployment stays last.
 - [ ] T203 Set up production PostgreSQL (Cloud SQL instance, database, user) via Terraform in
       `terraform/database.tf`, store the resulting connection string as the `DATABASE_URL` secret
       in Secret Manager and wire it into the Cloud Run service, then apply the schema with
-      `pnpm prisma migrate deploy` (depends on T201)
+      `pnpm prisma migrate deploy` (depends on T201).
+      IaC complete: `terraform/database.tf` provisions the Cloud SQL instance (no public IP,
+      ZONAL, POSTGRES_16), the `sima_invoice_monitor` database/`sima_app` user, and the
+      `sima-database-url` secret populated with the derived connection string; `main.tf` mounts
+      the Cloud SQL connector unconditionally. Verified with `terraform fmt`/`validate` and a
+      local-backend `plan`, which builds the full resource graph correctly but can't complete
+      because this environment has no Application Default Credentials — same "no real GCP
+      project" gap T201 flagged, now blocking `apply` too. Running `terraform apply` and
+      `pnpm prisma migrate deploy` against a live instance still needs the GCP
+      project/IAM + GitHub Actions WIF access noted as a blocker on T043.
 - [ ] T204 Configure the production GCS bucket for attachment storage (`GCS_BUCKET_NAME`,
       lifecycle rules, IAM binding for the Cloud Run service account) in `terraform/storage.tf`
       (depends on T201)

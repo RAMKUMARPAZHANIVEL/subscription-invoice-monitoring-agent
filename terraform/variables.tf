@@ -77,12 +77,6 @@ variable "cloud_run_timeout_seconds" {
   default     = 600
 }
 
-variable "sql_instance_connection_name" {
-  description = "Cloud SQL instance connection name (PROJECT:REGION:INSTANCE) to attach to Cloud Run via the built-in Cloud SQL connector. Left empty until the Cloud SQL instance is provisioned (see tasks.md T203); when empty, no Cloud SQL volume is attached."
-  type        = string
-  default     = ""
-}
-
 variable "sql_tier" {
   description = "Machine tier for the Cloud SQL for PostgreSQL instance provisioned in T203. Recorded here so Cloud Run sizing and Cloud SQL sizing are reviewed together; smallest tier that comfortably fits a low-QPS, once-daily invoice ingestion workload."
   type        = string
@@ -96,7 +90,7 @@ variable "sql_availability_type" {
 }
 
 variable "secret_env_vars" {
-  description = "Map of Cloud Run environment variable name -> Secret Manager secret ID it should be sourced from (:latest version). The secret containers for every entry except DATABASE_URL are created by secrets.tf (T202) with IAM access granted to the Cloud Run runtime identity; DATABASE_URL's container is created by T203 once the Cloud SQL connection string exists. Actual secret *values* are never set here — see secrets.tf for how to populate them out-of-band."
+  description = "Map of Cloud Run environment variable name -> Secret Manager secret ID it should be sourced from (:latest version). The secret containers for every entry except DATABASE_URL are created by secrets.tf (T202) with IAM access granted to the Cloud Run runtime identity, and their values are populated out-of-band; DATABASE_URL's container and initial value are created by database.tf (T203), which derives the connection string from the Cloud SQL instance/user it also provisions."
   type        = map(string)
   default = {
     DATABASE_URL        = "sima-database-url"
