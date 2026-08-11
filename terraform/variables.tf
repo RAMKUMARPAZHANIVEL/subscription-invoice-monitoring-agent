@@ -103,7 +103,7 @@ variable "secret_env_vars" {
 }
 
 variable "gcs_bucket_name" {
-  description = "Name of the GCS bucket used for attachment storage (provisioned in T204). Passed through as the GCS_BUCKET_NAME env var; left empty until the bucket exists."
+  description = "Optional override for the name of the GCS bucket used for attachment storage (storage.tf, T204). GCS bucket names are globally unique, so leave this empty to fall back to \"<project_id>-<name_prefix>-attachments\"; the Cloud Run GCS_BUCKET_NAME env var always tracks whichever name is actually provisioned."
   type        = string
   default     = ""
 }

@@ -5,7 +5,7 @@ Terraform configuration for the Invoice Monitor's GCP infrastructure. This confi
 project shared with Paperclip or any other workload; that project-level boundary is what keeps
 this infrastructure isolated, on top of the `labels` applied to every resource here.
 
-Provisioned by this configuration (T201/T202/T203 — see
+Provisioned by this configuration (T201/T202/T203/T204 — see
 `specs/001-gmail-invoice-ingestion/tasks.md` Phase 7 for the full rollout sequence):
 
 - Required API enablement
@@ -26,11 +26,17 @@ Provisioned by this configuration (T201/T202/T203 — see
   Terraform-generated password) already lives in state the moment the Cloud SQL user is created.
   After `terraform apply`, run `pnpm prisma migrate deploy` against the new instance (see
   "Applying Prisma migrations" below) before routing production traffic to it.
+- GCS bucket for invoice attachment storage, with object versioning, age-based storage-class
+  lifecycle rules (NEARLINE at 90 days, COLDLINE at 365 days — attachments are never deleted, since
+  every `Invoice` must stay traceable to its source attachment per the Complete Auditability
+  principle), and `roles/storage.objectAdmin` granted to the Cloud Run runtime identity scoped to
+  this bucket only (`storage.tf`, T204). The bucket name defaults to
+  `<project_id>-<name_prefix>-attachments`; override with `-var="gcs_bucket_name=..."` if that
+  collides with an existing bucket (names are globally unique across GCP).
 
-Deliberately **not** provisioned here — later tasks in the same Phase 7 sequence own these, using
+Deliberately **not** provisioned here — a later task in the same Phase 7 sequence owns this, using
 the outputs from this config:
 
-- GCS bucket for attachments (T204)
 - The Cloud Scheduler job itself (T208)
 
 ## Usage

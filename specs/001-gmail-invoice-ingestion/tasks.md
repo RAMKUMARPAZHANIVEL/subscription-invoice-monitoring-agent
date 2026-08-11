@@ -245,6 +245,20 @@ insert them before Phase 7 — production deployment stays last.
 - [ ] T204 Configure the production GCS bucket for attachment storage (`GCS_BUCKET_NAME`,
       lifecycle rules, IAM binding for the Cloud Run service account) in `terraform/storage.tf`
       (depends on T201)
+      IaC complete: `terraform/storage.tf` provisions the attachment bucket (versioned, uniform
+      bucket-level access, no delete lifecycle rule — only NEARLINE/COLDLINE storage-class
+      transitions at 90/365 days, since attachments must stay retrievable for Complete
+      Auditability) and grants the Cloud Run runtime identity `roles/storage.objectAdmin` scoped to
+      that bucket only. `main.tf`'s `GCS_BUCKET_NAME` env var now references the bucket resource
+      directly instead of the raw variable, so Cloud Run can never be pointed at a bucket Terraform
+      didn't create; `ATTACHMENT_STORE_DRIVER=gcs` was already wired in `main.tf` since T201.
+      `src/storage/gcsAttachmentStore.ts` and `src/config/env.ts` needed no changes — they already
+      read `GCS_BUCKET_NAME`/`ATTACHMENT_STORE_DRIVER` from env with no other GCS-specific
+      settings to add. Verified with `terraform fmt`/`validate` and a local-backend `plan`, which
+      built the full resource graph (including the new bucket/IAM resources) correctly and only
+      failed at the same missing-ADC step T201/T203 hit — this environment still has no real GCP
+      project or Application Default Credentials, so `terraform apply` and a live save/retrieve
+      round-trip against an actual bucket remain unverified (same blocker noted on T043/T203).
 - [ ] T205 Deploy the invoice monitor to Cloud Run using the existing CI/CD workflow
       (`.github/workflows/deploy.yml`) to build/push the image and roll out new revisions, while
       Cloud Run service configuration (env vars, secrets, Cloud SQL connection, scaling) stays

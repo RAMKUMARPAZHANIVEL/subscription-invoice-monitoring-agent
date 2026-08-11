@@ -14,7 +14,7 @@ output "artifact_registry_repository" {
 }
 
 output "cloud_run_runtime_service_account_email" {
-  description = "Email of the Cloud Run runtime service account. Grant this identity access to secrets (T202) and the GCS bucket (T204) as those resources are created."
+  description = "Email of the Cloud Run runtime service account. Has read/write/delete access to secrets (T202) and the attachment storage bucket (T204)."
   value       = google_service_account.cloud_run_runtime.email
 }
 
@@ -36,4 +36,9 @@ output "sql_database_name" {
 output "database_url_secret_id" {
   description = "Secret Manager secret ID holding the production DATABASE_URL."
   value       = google_secret_manager_secret.database_url.secret_id
+}
+
+output "gcs_attachment_bucket_name" {
+  description = "Name of the GCS bucket used for invoice attachment storage (GCS_BUCKET_NAME)."
+  value       = google_storage_bucket.attachments.name
 }

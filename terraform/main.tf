@@ -6,7 +6,7 @@ locals {
     INVOICE_EXTRACTION_PROVIDER = "claude"
     GCP_REGION                  = var.region
     GOOGLE_CLOUD_PROJECT        = var.project_id
-    GCS_BUCKET_NAME             = var.gcs_bucket_name
+    GCS_BUCKET_NAME             = google_storage_bucket.attachments.name
   }
 
   plain_env_vars = merge(local.default_env_vars, var.plain_env_vars)
@@ -163,6 +163,7 @@ resource "google_cloud_run_v2_service" "app" {
     google_project_iam_member.cloud_run_sql_client,
     google_secret_manager_secret_iam_member.cloud_run_secret_access,
     google_secret_manager_secret_iam_member.cloud_run_database_url_access,
+    google_storage_bucket_iam_member.cloud_run_attachments_access,
   ]
 }
 
