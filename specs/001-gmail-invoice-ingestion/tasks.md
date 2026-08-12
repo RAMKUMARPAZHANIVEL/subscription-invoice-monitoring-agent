@@ -243,14 +243,17 @@ insert them before Phase 7 — production deployment stays last.
       now reports the schema up to date. Verified the resulting schema directly: all 5 app tables
       plus `_prisma_migrations` exist, 7 FK constraints are in place, and a live insert/read/delete
       round-trip against `Vendor` succeeded (rolled back after verification, no data left behind).
-      **Known drift, not fixed here:** the live instance's `settings.tier` and
-      `ip_configuration.ipv4_enabled` no longer match this file's committed config (tier upsized
-      from `db-g1-small`, and a public IP was enabled) — `creator`/`last_modifier` on the sibling
-      Cloud Run resource show these were hand-changed very recently, so left as-is pending owner
-      confirmation rather than silently reverted via `terraform apply` (see WIZ-52 comments).
-      That same `apply` would also recreate the currently-tainted Cloud Run service
-      (unrelated `SECRETS_ACCESS_CHECK_FAILED` from a deploy-order race, now stale since the
-      `DATABASE_URL` secret version exists) — that's T205's live-deploy concern, not this task's.
+      **Drift reconciled 2026-08-12:** `terraform/database.tf` now sets `edition = "ENTERPRISE"`
+      and `ip_configuration.ipv4_enabled = true` to match the instance's actual required config —
+      GCP rejects a Cloud SQL instance with no public IP, no private VPC peering, and no PSC, and
+      this project has neither of the latter two provisioned. No `authorized_networks` entries are
+      added, so the only reachable path remains the IAM-authenticated Cloud SQL connector/Auth
+      Proxy used by Cloud Run. `terraform plan` now reports 0 changes against
+      `google_sql_database_instance.main` and the other database resources — config and live state
+      match. `settings.tier` was already `db-g1-small`, matching `var.sql_tier`'s default; no drift
+      there. The Cloud Run service is still tainted (unrelated `SECRETS_ACCESS_CHECK_FAILED` from a
+      deploy-order race, now stale since the `DATABASE_URL` secret version exists) — recreating it
+      is T205's live-deploy concern, not this task's.
 - [ ] T204 Configure the production GCS bucket for attachment storage (`GCS_BUCKET_NAME`,
       lifecycle rules, IAM binding for the Cloud Run service account) in `terraform/storage.tf`
       (depends on T201)
