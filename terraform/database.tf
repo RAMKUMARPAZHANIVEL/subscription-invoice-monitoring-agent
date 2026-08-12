@@ -21,6 +21,7 @@ resource "google_sql_database_instance" "main" {
   deletion_protection = true
 
   settings {
+    edition           = "ENTERPRISE"
     tier              = var.sql_tier
     availability_type = var.sql_availability_type
     disk_autoresize   = true
@@ -31,10 +32,14 @@ resource "google_sql_database_instance" "main" {
       point_in_time_recovery_enabled = true
     }
 
-    # No public IP: reachable only through the Cloud Run built-in Cloud SQL connector
-    # (Unix socket, wired up in main.tf) — no custom VPC needed, matching T201's design.
+    # A public IP is required here: GCP rejects an instance with no public IP, no private
+    # VPC peering, and no PSC ("At least one of Public IP or Private IP or PSC connectivity
+    # must be enabled"), and this project has neither private networking nor PSC provisioned.
+    # This does not open the instance to the internet — there are no authorized_networks
+    # entries below, so the only path in is the IAM-authenticated Cloud SQL connector/Auth
+    # Proxy that Cloud Run uses (Unix socket, wired up in main.tf).
     ip_configuration {
-      ipv4_enabled = false
+      ipv4_enabled = true
     }
 
     user_labels = var.labels
