@@ -229,19 +229,28 @@ insert them before Phase 7 — production deployment stays last.
       env var actually required at startup) in GCP Secret Manager and wire them into the Cloud Run
       service in `terraform/secrets.tf` (depends on T201).
       `DATABASE_URL` is not configured here — it depends on the Cloud SQL instance created in T203.
-- [ ] T203 Set up production PostgreSQL (Cloud SQL instance, database, user) via Terraform in
+- [x] T203 Set up production PostgreSQL (Cloud SQL instance, database, user) via Terraform in
       `terraform/database.tf`, store the resulting connection string as the `DATABASE_URL` secret
       in Secret Manager and wire it into the Cloud Run service, then apply the schema with
       `pnpm prisma migrate deploy` (depends on T201).
-      IaC complete: `terraform/database.tf` provisions the Cloud SQL instance (no public IP,
-      ZONAL, POSTGRES_16), the `sima_invoice_monitor` database/`sima_app` user, and the
-      `sima-database-url` secret populated with the derived connection string; `main.tf` mounts
-      the Cloud SQL connector unconditionally. Verified with `terraform fmt`/`validate` and a
-      local-backend `plan`, which builds the full resource graph correctly but can't complete
-      because this environment has no Application Default Credentials — same "no real GCP
-      project" gap T201 flagged, now blocking `apply` too. Running `terraform apply` and
-      `pnpm prisma migrate deploy` against a live instance still needs the GCP
-      project/IAM + GitHub Actions WIF access noted as a blocker on T043.
+      Live-verified 2026-08-12 against project `ai-company-dev-505014` (dedicated to Invoice
+      Monitor, not shared with Paperclip): `google_sql_database_instance.main` (`sima-postgres`,
+      POSTGRES_16, ZONAL) is `RUNNABLE` with the `sima_invoice_monitor` database and `sima_app`
+      user; `sima-database-url` in Secret Manager holds the derived connection string, IAM-scoped
+      to the Cloud Run runtime service account only. Ran `pnpm prisma migrate deploy` through the
+      Cloud SQL Auth Proxy (instance has no public-internet-reachable path — see note below) —
+      both migrations applied cleanly to a previously-empty database; `prisma migrate status`
+      now reports the schema up to date. Verified the resulting schema directly: all 5 app tables
+      plus `_prisma_migrations` exist, 7 FK constraints are in place, and a live insert/read/delete
+      round-trip against `Vendor` succeeded (rolled back after verification, no data left behind).
+      **Known drift, not fixed here:** the live instance's `settings.tier` and
+      `ip_configuration.ipv4_enabled` no longer match this file's committed config (tier upsized
+      from `db-g1-small`, and a public IP was enabled) — `creator`/`last_modifier` on the sibling
+      Cloud Run resource show these were hand-changed very recently, so left as-is pending owner
+      confirmation rather than silently reverted via `terraform apply` (see WIZ-52 comments).
+      That same `apply` would also recreate the currently-tainted Cloud Run service
+      (unrelated `SECRETS_ACCESS_CHECK_FAILED` from a deploy-order race, now stale since the
+      `DATABASE_URL` secret version exists) — that's T205's live-deploy concern, not this task's.
 - [ ] T204 Configure the production GCS bucket for attachment storage (`GCS_BUCKET_NAME`,
       lifecycle rules, IAM binding for the Cloud Run service account) in `terraform/storage.tf`
       (depends on T201)
