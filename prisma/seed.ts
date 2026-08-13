@@ -65,6 +65,15 @@ const vendors: VendorSeed[] = [
     senderPatterns: ['@corevalue.dev'],
     subjectPatterns: ['invoice', 'receipt'],
   },
+  {
+    // Controlled vendor for production ingestion validation (T206/WIZ-55). Self-to-self
+    // (admin mailbox sending to itself) so sender/subject stay fully within our control and can't
+    // collide with real vendor mail.
+    name: 'SIMA Test Vendor',
+    enabled: true,
+    senderPatterns: ['ramkumar@replicacia.com'],
+    subjectPatterns: ['SIMA-TEST-INVOICE'],
+  },
 ];
 
 async function main(): Promise<void> {
