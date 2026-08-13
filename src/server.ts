@@ -123,6 +123,12 @@ export function createServer(): Express {
 
   app.use(express.json());
 
+  // Cloud Run GFE in this org intercepts /healthz before it reaches the container.
+  // Both /health and /healthz are registered; external callers must use /health.
+  app.get('/health', (_req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
   app.get('/healthz', (_req: Request, res: Response) => {
     res.status(200).json({ status: 'ok' });
   });

@@ -17,7 +17,7 @@ RUN pnpm run build
 
 FROM base AS production-deps
 COPY package.json pnpm-lock.yaml ./
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod --ignore-scripts
 
 FROM node:20-slim AS runner
 ENV NODE_ENV=production
