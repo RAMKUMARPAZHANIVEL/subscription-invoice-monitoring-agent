@@ -288,12 +288,15 @@ insert them before Phase 7 — production deployment stays last.
       integration tests against a real DB per the constitution; not re-verified live here since
       Cloud Run is still running the Terraform placeholder image (`cloudrun/container/hello`) —
       real end-to-end ingestion against production Postgres is T205/T206/T207's concern.
-- [ ] T205 Deploy the invoice monitor to Cloud Run using the existing CI/CD workflow
+- [x] T205 Deploy the invoice monitor to Cloud Run using the existing CI/CD workflow
       (`.github/workflows/deploy.yml`) to build/push the image and roll out new revisions, while
       Cloud Run service configuration (env vars, secrets, Cloud SQL connection, scaling) stays
       owned by Terraform — update the workflow so it deploys images without redefining settings
-      Terraform already manages, avoiding drift between the two — and confirm `GET /healthz`
+      Terraform already manages, avoiding drift between the two — and confirm `GET /health`
       returns `200` (depends on T202, T203, T204)
+      **Note:** Cloud Run's GFE for this GCP org intercepts GET /healthz before reaching the
+      container. `/health` is the external health endpoint; `/healthz` is also registered in
+      the app for environments where it is not intercepted.
 - [ ] T206 Configure Gmail invoice ingestion for the production account (OAuth consent, refresh
       token generation, seed production `Vendor` rows via `pnpm db:seed`) (depends on T205)
 - [ ] T207 Verify AI invoice extraction against real production invoice emails and confirm
