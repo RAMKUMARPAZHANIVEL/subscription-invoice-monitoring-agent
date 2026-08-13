@@ -71,7 +71,7 @@ const vendors: VendorSeed[] = [
     // collide with real vendor mail.
     name: 'SIMA Test Vendor',
     enabled: true,
-    senderPatterns: ['ramkumar@replicacia.com'],
+    senderPatterns: ['akashram006@gmail.com'],
     subjectPatterns: ['SIMA-TEST-INVOICE'],
   },
 ];
