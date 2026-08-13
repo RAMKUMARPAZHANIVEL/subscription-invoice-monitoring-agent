@@ -43,10 +43,12 @@ Provisioned by this configuration (T201/T202/T203/T204 — see
   `<project_id>-<name_prefix>-attachments`; override with `-var="gcs_bucket_name=..."` if that
   collides with an existing bucket (names are globally unique across GCP).
 
-Deliberately **not** provisioned here — a later task in the same Phase 7 sequence owns this, using
-the outputs from this config:
-
-- The Cloud Scheduler job itself (T208)
+- Cloud Scheduler job that triggers daily invoice ingestion (`POST /tasks/ingest-invoices`),
+  authenticated via the Cloud Scheduler invoker service account's OIDC token, with schedule/time
+  zone/retry behavior driven by `var.scheduler_schedule` / `var.scheduler_time_zone` /
+  `var.scheduler_retry_count` / `var.scheduler_attempt_deadline_seconds` (`scheduler.tf`, T208).
+  Terraform is the sole owner of this job — `.github/workflows/deploy.yml` no longer creates or
+  updates a Cloud Scheduler job.
 
 ## Usage
 

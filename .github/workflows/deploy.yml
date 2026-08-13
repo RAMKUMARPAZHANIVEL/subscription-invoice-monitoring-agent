@@ -11,9 +11,6 @@ env:
   SERVICE_NAME: subscription-invoice-monitoring-agent
   REGION: ${{ vars.GCP_REGION }}
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-  SCHEDULER_JOB_NAME: subscription-invoice-monitoring-agent-ingest-invoices
-  SCHEDULER_SCHEDULE: '0 8 * * *'
-  SCHEDULER_TIME_ZONE: UTC
 
 jobs:
   deploy:
@@ -50,37 +47,3 @@ jobs:
           service: ${{ env.SERVICE_NAME }}
           region: ${{ env.REGION }}
           image: ${{ env.IMAGE }}
-
-      - name: Allow Cloud Scheduler to invoke the service
-        run: |
-          gcloud run services add-iam-policy-binding "${{ env.SERVICE_NAME }}" \
-            --project="${{ env.PROJECT_ID }}" \
-            --region="${{ env.REGION }}" \
-            --member="serviceAccount:${{ secrets.GCP_SCHEDULER_SERVICE_ACCOUNT }}" \
-            --role="roles/run.invoker" \
-            --quiet
-
-      - name: Create or update the daily ingest-invoices Cloud Scheduler job
-        env:
-          SERVICE_URL: ${{ steps.deploy.outputs.url }}
-        run: |
-          if gcloud scheduler jobs describe "${{ env.SCHEDULER_JOB_NAME }}" \
-              --project="${{ env.PROJECT_ID }}" \
-              --location="${{ env.REGION }}" >/dev/null 2>&1; then
-            ACTION=update
-          else
-            ACTION=create
-          fi
-
-          gcloud scheduler jobs "$ACTION" http "${{ env.SCHEDULER_JOB_NAME }}" \
-            --project="${{ env.PROJECT_ID }}" \
-            --location="${{ env.REGION }}" \
-            --schedule="${{ env.SCHEDULER_SCHEDULE }}" \
-            --time-zone="${{ env.SCHEDULER_TIME_ZONE }}" \
-            --uri="${SERVICE_URL}/tasks/ingest-invoices" \
-            --http-method=POST \
-            --oidc-service-account-email="${{ secrets.GCP_SCHEDULER_SERVICE_ACCOUNT }}" \
-            --oidc-token-audience="${SERVICE_URL}" \
-            --max-retry-attempts=3 \
-            --attempt-deadline=600s \
-            --quiet

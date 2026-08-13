@@ -113,3 +113,27 @@ variable "plain_env_vars" {
   type        = map(string)
   default     = {}
 }
+
+variable "scheduler_schedule" {
+  description = "Cron schedule (unix-cron format) for the daily invoice ingestion Cloud Scheduler job (T208). Matches the cadence previously set by the now-removed step in .github/workflows/deploy.yml."
+  type        = string
+  default     = "0 8 * * *"
+}
+
+variable "scheduler_time_zone" {
+  description = "IANA time zone name the scheduler_schedule cron expression is evaluated in (T208)."
+  type        = string
+  default     = "UTC"
+}
+
+variable "scheduler_retry_count" {
+  description = "Number of times Cloud Scheduler retries the ingestion job on failure (non-2xx response or timeout) before giving up for that run (T208)."
+  type        = number
+  default     = 3
+}
+
+variable "scheduler_attempt_deadline_seconds" {
+  description = "Per-attempt deadline, in seconds, Cloud Scheduler waits for the Cloud Run request to complete before treating it as a failed attempt (T208). Matches cloud_run_timeout_seconds so a healthy run is never cut off early by the scheduler."
+  type        = number
+  default     = 600
+}

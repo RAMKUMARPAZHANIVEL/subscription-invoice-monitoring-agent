@@ -330,11 +330,48 @@ insert them before Phase 7 — production deployment stays last.
       acceptance criteria around correct structured output/persistence can be exercised) until
       whoever administers the CoreValue gateway provisions an Anthropic provider key for this
       account.
-- [ ] T208 Configure the daily Cloud Scheduler job via Terraform (`terraform/scheduler.tf`, driven
+- [x] T208 Configure the daily Cloud Scheduler job via Terraform (`terraform/scheduler.tf`, driven
       by `SCHEDULER_SCHEDULE`/`SCHEDULER_TIME_ZONE` variables) for production, remove the
       duplicate scheduler-creation step from `.github/workflows/deploy.yml` so Terraform is the
       sole owner of the job, and confirm a manual `gcloud scheduler jobs run` triggers a
       successful ingestion (depends on T201, T205)
+      **Verified live 2026-08-13:** Added `terraform/scheduler.tf`
+      (`google_cloud_scheduler_job.ingest_invoices`) plus `var.scheduler_schedule` /
+      `var.scheduler_time_zone` / `var.scheduler_retry_count` /
+      `var.scheduler_attempt_deadline_seconds` (defaults: `0 8 * * *` UTC, 3 retries, 600s
+      attempt deadline matching `cloud_run_timeout_seconds`), invoking
+      `POST /tasks/ingest-invoices` with an OIDC token from the existing `scheduler_invoker`
+      service account (`main.tf`, already scoped to `roles/run.invoker` on the Cloud Run service
+      only). Removed the "Allow Cloud Scheduler to invoke the service" and "Create or update the
+      daily ingest-invoices Cloud Scheduler job" steps (and their now-unused `SCHEDULER_*` env
+      vars) from `.github/workflows/deploy.yml` so Terraform is the sole owner — confirmed no
+      scheduler job existed yet (`gcloud scheduler jobs list` returned 0 items), so there was no
+      pre-existing CI-created job to import/reconcile. `terraform apply` created the job
+      (`subscription-invoice-monitoring-agent-ingest-invoices`); a pre-existing, previously
+      documented benign drift on `google_cloud_run_v2_service.app` (`scaling`/
+      `execution_environment` normalization, noted in T204) was applied incidentally in the same
+      plan and did not change service behavior (`GET /health` returns `200` after apply).
+      Triggered `gcloud scheduler jobs run` twice against production: unauthenticated calls to
+      the service return `403` (confirms it's not publicly invokable), while the scheduler's own
+      OIDC-authenticated request returned `200` — Cloud Run logs show the full run
+      (`runId 57881069-...`, `emailsScanned:1`, `invoiceEmailsFound:1`, `failures:1`,
+      `durationMs:27814`) starting and completing without aborting the request. Queried
+      production Postgres directly (via `cloud-sql-proxy` + the Cloud SQL connection string in
+      the `sima-database-url` secret) and confirmed `ProcessingHistoryEntry` rows
+      (`RETRYING` x2, then `FAILED`) were written for the discovered email
+      (`gmailMessageId 19ffb914e717357e`), matching the run's structured summary log — all 6
+      acceptance criteria satisfied: job deployed, authenticates with Cloud Run, ingestion starts
+      and completes from the scheduled request, processing summary/history recorded, retry
+      behavior configured (both Cloud Scheduler's `retry_config` and the app's own
+      extraction-retry logic fired as designed), and the job is fully Terraform-managed. The
+      single email's extraction still fails with the same `"No anthropic provider key
+    available"` CoreValue gateway error already tracked as T207's blocker — expected and out of
+      scope here, since T208 only requires ingestion to _start_ successfully from the scheduled
+      request, not for extraction to succeed. Also observed `ProcessingHistoryEntry.evaluatedAt`
+      values appear offset by roughly -5:30 from the request's actual UTC timestamp (e.g. a
+      17:07:36 UTC log line has `evaluatedAt: 2026-08-13T11:37:36.447Z`) — looks like a
+      pre-existing timezone-handling issue unrelated to Cloud Scheduler config, not investigated
+      further here; worth a follow-up if it matters for T209's validation scenarios.
 - [ ] T209 Run the `quickstart.md` validation scenarios end-to-end against production and record
       results in `specs/001-gmail-invoice-ingestion/production-validation.md` (depends on T206,
       T207, T208)
