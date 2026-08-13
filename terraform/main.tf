@@ -82,11 +82,11 @@ resource "google_project_iam_member" "cloud_run_sql_client" {
 # ---------------------------------------------------------------------------
 
 resource "google_cloud_run_v2_service" "app" {
-  project  = var.project_id
-  name     = var.service_name
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
-  labels   = var.labels
+  project             = var.project_id
+  name                = var.service_name
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  labels              = var.labels
   deletion_protection = false
 
   template {

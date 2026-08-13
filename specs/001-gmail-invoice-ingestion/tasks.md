@@ -233,8 +233,12 @@ insert them before Phase 7 — production deployment stays last.
       `terraform/database.tf`, store the resulting connection string as the `DATABASE_URL` secret
       in Secret Manager and wire it into the Cloud Run service, then apply the schema with
       `pnpm prisma migrate deploy` (depends on T201).
-      Live-verified 2026-08-12 against project `ai-company-dev-505014` (dedicated to Invoice
-      Monitor, not shared with Paperclip): `google_sql_database_instance.main` (`sima-postgres`,
+      Live-verified 2026-08-12 against project `ai-company-dev-505014`. **Correction (2026-08-13,
+      WIZ-53):** this was described as "dedicated to Invoice Monitor, not shared with Paperclip" —
+      that was false; it's the shared company/Paperclip dev project. That's now the accepted
+      production project per WIZ-53's resolved governance decision (see `terraform/README.md`),
+      but the isolation claim itself was inaccurate and is corrected here for the record.
+      `google_sql_database_instance.main` (`sima-postgres`,
       POSTGRES_16, ZONAL) is `RUNNABLE` with the `sima_invoice_monitor` database and `sima_app`
       user; `sima-database-url` in Secret Manager holds the derived connection string, IAM-scoped
       to the Cloud Run runtime service account only. Ran `pnpm prisma migrate deploy` through the
@@ -254,23 +258,36 @@ insert them before Phase 7 — production deployment stays last.
       there. The Cloud Run service is still tainted (unrelated `SECRETS_ACCESS_CHECK_FAILED` from a
       deploy-order race, now stale since the `DATABASE_URL` secret version exists) — recreating it
       is T205's live-deploy concern, not this task's.
-- [ ] T204 Configure the production GCS bucket for attachment storage (`GCS_BUCKET_NAME`,
+- [x] T204 Configure the production GCS bucket for attachment storage (`GCS_BUCKET_NAME`,
       lifecycle rules, IAM binding for the Cloud Run service account) in `terraform/storage.tf`
       (depends on T201)
-      IaC complete: `terraform/storage.tf` provisions the attachment bucket (versioned, uniform
+      IaC: `terraform/storage.tf` provisions the attachment bucket (versioned, uniform
       bucket-level access, no delete lifecycle rule — only NEARLINE/COLDLINE storage-class
       transitions at 90/365 days, since attachments must stay retrievable for Complete
       Auditability) and grants the Cloud Run runtime identity `roles/storage.objectAdmin` scoped to
-      that bucket only. `main.tf`'s `GCS_BUCKET_NAME` env var now references the bucket resource
+      that bucket only. `main.tf`'s `GCS_BUCKET_NAME` env var references the bucket resource
       directly instead of the raw variable, so Cloud Run can never be pointed at a bucket Terraform
       didn't create; `ATTACHMENT_STORE_DRIVER=gcs` was already wired in `main.tf` since T201.
-      `src/storage/gcsAttachmentStore.ts` and `src/config/env.ts` needed no changes — they already
-      read `GCS_BUCKET_NAME`/`ATTACHMENT_STORE_DRIVER` from env with no other GCS-specific
-      settings to add. Verified with `terraform fmt`/`validate` and a local-backend `plan`, which
-      built the full resource graph (including the new bucket/IAM resources) correctly and only
-      failed at the same missing-ADC step T201/T203 hit — this environment still has no real GCP
-      project or Application Default Credentials, so `terraform apply` and a live save/retrieve
-      round-trip against an actual bucket remain unverified (same blocker noted on T043/T203).
+      `src/storage/gcsAttachmentStore.ts` and `src/config/env.ts` needed no changes.
+      **Live-verified 2026-08-13** against project `ai-company-dev-505014` (see WIZ-53 for the
+      accepted decision on using this shared project — `terraform/README.md` has the detail):
+      bucket `ai-company-dev-505014-sima-attachments` exists with versioning on, the documented
+      NEARLINE/COLDLINE lifecycle rules, uniform bucket-level access, and `roles/storage.objectAdmin`
+      granted only to `sima-run@ai-company-dev-505014.iam.gserviceaccount.com`. Ran a real save →
+      retrieve → getMetadata → delete round trip against the live bucket for both a PDF and a CSV
+      payload (byte-identical on retrieve, correct content-type/size/original-filename metadata).
+      Cloud Run service is Ready with all 6 secret containers holding real versions (previously 0
+      versions/not-Ready, per T204's 2026-08-12 note — resolved out-of-band before this heartbeat).
+      Also fixed unrelated Terraform hygiene found during this verification: the state for
+      T201–T204 had landed at the GCS backend bucket root (`default.tfstate`) instead of the
+      documented `invoice-monitor/production/` prefix from `backend.hcl.example` — migrated it with
+      `terraform init -migrate-state` (0 resources lost, `terraform plan` shows only a benign
+      `scaling` block normalization) and archived the old root file as
+      `_deprecated-root-state-backup-2026-08-13.tfstate` rather than deleting it outright.
+      Postgres persistence (`Attachment` row storing `storageRef`) is exercised by existing
+      integration tests against a real DB per the constitution; not re-verified live here since
+      Cloud Run is still running the Terraform placeholder image (`cloudrun/container/hello`) —
+      real end-to-end ingestion against production Postgres is T205/T206/T207's concern.
 - [ ] T205 Deploy the invoice monitor to Cloud Run using the existing CI/CD workflow
       (`.github/workflows/deploy.yml`) to build/push the image and roll out new revisions, while
       Cloud Run service configuration (env vars, secrets, Cloud SQL connection, scaling) stays

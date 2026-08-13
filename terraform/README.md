@@ -1,9 +1,18 @@
 # Invoice Monitor (SIMA) — Terraform
 
-Terraform configuration for the Invoice Monitor's GCP infrastructure. This config targets a
-**dedicated GCP project** used only for the Invoice Monitor — do not point `project_id` at a
-project shared with Paperclip or any other workload; that project-level boundary is what keeps
-this infrastructure isolated, on top of the `labels` applied to every resource here.
+Terraform configuration for the Invoice Monitor's GCP infrastructure.
+
+**Project:** production runs in `ai-company-dev-505014`, the shared company/Paperclip dev
+project. This config originally required a dedicated, unshared project (see WIZ-53 history); that
+was overridden by an explicit accepted decision on WIZ-53
+(request_confirmation `f72b4a7b`, accepted 2026-08-13) because no dedicated project was available
+and live infra had already been applied there. Isolation is enforced only at the resource level
+now — the `labels` applied to every resource here, plus IAM bindings scoped to the narrowest role
+needed (e.g. `roles/storage.objectAdmin` on the attachment bucket only) — **not** at the project
+boundary. Concretely, this means default legacy bucket/object IAM roles granted to the shared
+project's Editor/Owner/Viewer principals (visible via `gcloud storage buckets get-iam-policy`)
+extend to SIMA's resources too; anyone provisioning a genuinely dedicated project for SIMA later
+should re-tighten this.
 
 Provisioned by this configuration (T201/T202/T203/T204 — see
 `specs/001-gmail-invoice-ingestion/tasks.md` Phase 7 for the full rollout sequence):

@@ -1,5 +1,5 @@
 variable "project_id" {
-  description = "GCP project ID dedicated to the Invoice Monitor (SIMA). Must not be shared with Paperclip or other unrelated workloads."
+  description = "GCP project ID for the Invoice Monitor (SIMA). Production uses ai-company-dev-505014 (shared company/Paperclip dev project) per the accepted WIZ-53 decision to override the original dedicated-project requirement — see terraform/README.md."
   type        = string
 }
 
