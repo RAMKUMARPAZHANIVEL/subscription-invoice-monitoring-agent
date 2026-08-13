@@ -137,6 +137,19 @@ resource "google_cloud_run_v2_service" "app" {
         name       = "cloudsql"
         mount_path = "/cloudsql"
       }
+
+      # The GFE for this GCP org intercepts GET /healthz before it reaches the container.
+      # Use /health (which passes through) as the startup probe path.
+      startup_probe {
+        http_get {
+          path = "/health"
+          port = 8080
+        }
+        initial_delay_seconds = 0
+        timeout_seconds       = 10
+        period_seconds        = 10
+        failure_threshold     = 3
+      }
     }
 
     # Cloud SQL instance itself is provisioned in database.tf (T203); referencing it directly
