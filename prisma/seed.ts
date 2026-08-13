@@ -66,12 +66,13 @@ const vendors: VendorSeed[] = [
     subjectPatterns: ['invoice', 'receipt'],
   },
   {
-    // Controlled vendor for production ingestion validation (T206/WIZ-55). Self-to-self
-    // (admin mailbox sending to itself) so sender/subject stay fully within our control and can't
-    // collide with real vendor mail.
+    // Controlled vendor for production ingestion validation (T206/WIZ-55). Sender is the
+    // mailbox owner's own controlled address (ramkumar@replicacia.com), which is what actually
+    // sent the live test email into the monitored GMAIL_ADMIN_EMAIL inbox — kept fully within
+    // our control and can't collide with real vendor mail.
     name: 'SIMA Test Vendor',
     enabled: true,
-    senderPatterns: ['akashram006@gmail.com'],
+    senderPatterns: ['ramkumar@replicacia.com'],
     subjectPatterns: ['SIMA-TEST-INVOICE'],
   },
 ];

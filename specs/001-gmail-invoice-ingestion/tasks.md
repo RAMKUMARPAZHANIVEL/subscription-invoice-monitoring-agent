@@ -297,8 +297,22 @@ insert them before Phase 7 — production deployment stays last.
       **Note:** Cloud Run's GFE for this GCP org intercepts GET /healthz before reaching the
       container. `/health` is the external health endpoint; `/healthz` is also registered in
       the app for environments where it is not intercepted.
-- [ ] T206 Configure Gmail invoice ingestion for the production account (OAuth consent, refresh
+- [x] T206 Configure Gmail invoice ingestion for the production account (OAuth consent, refresh
       token generation, seed production `Vendor` rows via `pnpm db:seed`) (depends on T205)
+      **Verified live 2026-08-13:** OAuth credentials (`sima-gmail-*` secrets) confirmed valid via
+      direct `oauth2.googleapis.com/token` exchange. Seeded a controlled `SIMA Test Vendor`
+      (`senderPatterns: ['ramkumar@replicacia.com']`, `subjectPatterns: ['SIMA-TEST-INVOICE']`) so
+      production verification can't collide with real vendor mail. Sent a real self-addressed test
+      email with PDF+CSV attachments into the monitored `GMAIL_ADMIN_EMAIL` inbox and triggered
+      `POST /tasks/ingest-invoices` against the live Cloud Run service: discovery found the email
+      (`emailsScanned: 1`), `SourceEmail.gmailMessageId` was persisted, both attachments were
+      downloaded and uploaded to the production GCS bucket, and `ProcessingHistoryEntry` rows were
+      written recording the outcome — all 6 acceptance criteria for this task confirmed against
+      real production state (query in prod DB). AI extraction into an `Invoice` row itself failed
+      (`gateway.corevalue.dev` returned `"No anthropic provider key available"` even with a
+      well-formed `COREVALUE_API_KEY`) — that's an external CoreValue gateway provisioning issue
+      unrelated to Gmail ingestion, out of scope here, and blocks T207 (tracked there) rather than
+      this task.
 - [ ] T207 Verify AI invoice extraction against real production invoice emails and confirm
       `Invoice` rows match their source PDF/CSV attachments (depends on T206)
 - [ ] T208 Configure the daily Cloud Scheduler job via Terraform (`terraform/scheduler.tf`, driven
