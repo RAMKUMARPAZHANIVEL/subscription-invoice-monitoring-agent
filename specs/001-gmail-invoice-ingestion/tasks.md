@@ -315,6 +315,21 @@ insert them before Phase 7 — production deployment stays last.
       this task.
 - [ ] T207 Verify AI invoice extraction against real production invoice emails and confirm
       `Invoice` rows match their source PDF/CSV attachments (depends on T206)
+      **Blocked 2026-08-13:** Also found and fixed a routing regression in `aiExtractor.ts`
+      (`00b0b76`) — a commit pushed straight to `main` had dropped the `!env.GATEWAY_URL` guard
+      from the Bedrock-routing condition, the same defect previously fixed under WIZ-48 T043. Left
+      unfixed, it would have made `INVOICE_EXTRACTION_PROVIDER=bedrock` always route to native AWS
+      Bedrock, bypassing the CoreValue gateway even when `GATEWAY_URL` is configured (production
+      has both set) — a silent behavior change, and it also broke `aiExtractor.test.ts`'s
+      gateway-routing test, which would have failed CI. Reverted; 11/11 `aiExtractor.test.ts` tests
+      pass again. Separately, re-ran a live extraction call against the real CoreValue gateway
+      (`https://gateway.corevalue.dev`, same COREVALUE_API_KEY-bearing path production uses) and
+      reproduced the exact `"No anthropic provider key available"` 500 error T206 found on
+      2026-08-13 — this is still occurring and is an external CoreValue gateway provisioning issue,
+      not a code defect. T207 cannot proceed (no extraction call can succeed, so none of its
+      acceptance criteria around correct structured output/persistence can be exercised) until
+      whoever administers the CoreValue gateway provisions an Anthropic provider key for this
+      account.
 - [ ] T208 Configure the daily Cloud Scheduler job via Terraform (`terraform/scheduler.tf`, driven
       by `SCHEDULER_SCHEDULE`/`SCHEDULER_TIME_ZONE` variables) for production, remove the
       duplicate scheduler-creation step from `.github/workflows/deploy.yml` so Terraform is the
