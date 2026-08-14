@@ -239,3 +239,48 @@ longer selects _which API shape_ (Anthropic Messages vs. Bedrock InvokeModel) is
 host — `INVOICE_EXTRACTION_PROVIDER` alone does. See WIZ-81 for the implementation change
 (`aiExtractor.ts`'s Bedrock-routing condition drops `!env.GATEWAY_URL`) and updated
 `aiExtractor.test.ts` coverage for both provider paths with `GATEWAY_URL` configured.
+
+## T207 verification (2026-08-14, WIZ-56)
+
+The WIZ-81 fix above was prepared (code, docs, tests) but never actually committed to `main`
+despite its own run summary claiming a push — confirmed via `git log`/`git fetch origin` showing
+`main` still had the old `!env.GATEWAY_URL` guard. Committed and pushed as `f4fa225`, then used it
+to complete T207's live extraction verification, which had been blocked since 2026-08-13.
+
+**Provider/credentials verified**: `INVOICE_EXTRACTION_PROVIDER=bedrock`,
+`GATEWAY_URL=https://gateway.corevalue.dev`, real `COREVALUE_API_KEY` (production values, from
+`.env`, never logged/printed in full).
+
+**Live `extractInvoiceData` calls** (real gateway, no mocks) for all 4 required scenarios:
+
+| Scenario                   | Result                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PDF-sourced text           | Pass — `amount: "129.00"`, `currency: "USD"`, dates and line items (`99.00`+`30.00`=`129.00`) all match the source text exactly, `HIGH` confidence            |
+| CSV-sourced text           | Pass — `amount: "57.75"` (`45.50`+`12.25`), `USAGE_BASED` correctly inferred from a usage-billing CSV, matches source, `HIGH` confidence                      |
+| Email-body text            | Pass — `amount: "44.00"`, `invoiceDate: "2026-07-05"` (from "July 5, 2026" in the body), matches source, `HIGH` confidence                                    |
+| Invalid/unextractable text | Pass — failed safely: `AiExtractionError` after 3 attempts, Zod validation errors on missing `amount`/`currency`/`invoiceDate` — no data fabricated, no crash |
+
+Critically, none of these calls reproduced the `"No anthropic provider key available"` error that
+blocked T206/T207 since 2026-08-13 — confirming the routing fix resolves the actual root cause.
+
+**Persistence / failure-recording**: full test suite (147/147) passing against real local Postgres,
+including `invoiceMonitor.test.ts`'s real-DB integration tests for duplicate prevention, retry
+logic, and `FAILED` outcome recording. Live `POST /tasks/ingest-invoices` against the real Gmail
+mailbox: `emailsScanned: 0` (no new mail since the last processed message — consistent with prior
+sessions, not a defect). Direct DB query: `ProcessingHistoryEntry` has 112 historical `FAILED` rows
+(from the blocked period) against only 3 `Invoice` rows total (all `PROCESSED`) — confirms invalid
+extractions never produced incorrect `Invoice` records.
+
+**Credential-safety review**: every `logger.error`/`logger.warn` call site in `aiExtractor.ts` and
+`bedrockExtractor.ts` logs only `{ err, attempt }`-shaped objects (pino), never request
+headers/config or the API key itself.
+
+**Housekeeping**: found and removed stray AWS SigV4 debug text that had been appended into local
+`.env` (gitignored, never committed) by an earlier session — cosmetic cleanup, not a real
+credential leak (the logged signature is single-request-scoped and non-replayable outside that
+exact request).
+
+**Limitation carried forward from T043/T208**: no live GCP/Cloud Run access is available in this
+sandbox, so this verification ran against the same real-external-services-plus-local-Postgres
+environment used throughout this feature's validation, not the deployed Cloud Run service
+directly.

@@ -313,7 +313,7 @@ insert them before Phase 7 — production deployment stays last.
       well-formed `COREVALUE_API_KEY`) — that's an external CoreValue gateway provisioning issue
       unrelated to Gmail ingestion, out of scope here, and blocks T207 (tracked there) rather than
       this task.
-- [ ] T207 Verify AI invoice extraction against real production invoice emails and confirm
+- [x] T207 Verify AI invoice extraction against real production invoice emails and confirm
       `Invoice` rows match their source PDF/CSV attachments (depends on T206)
       **Blocked 2026-08-13:** Also found and fixed a routing regression in `aiExtractor.ts`
       (`00b0b76`) — a commit pushed straight to `main` had dropped the `!env.GATEWAY_URL` guard
@@ -342,6 +342,35 @@ insert them before Phase 7 — production deployment stays last.
       extraction call against production still needs to be re-verified now that routing actually
       reaches `bedrockExtractor.ts`; that re-verification is separate follow-up work, not part of
       WIZ-81.
+      **Verified live 2026-08-14 (WIZ-56):** The WIZ-81 fix (`aiExtractor.ts`,
+      `.env.example`/README doc updates, `aiExtractor.test.ts` gateway-routing coverage) was
+      prepared but never actually committed by the WIZ-81 run despite its own summary claiming a
+      push — `git log`/`git fetch origin` confirmed `main` still had the old `!env.GATEWAY_URL`
+      guard. Committed and pushed as `f4fa225`. Re-ran `extractInvoiceData` directly against the
+      real, production-configured provider (`INVOICE_EXTRACTION_PROVIDER=bedrock`,
+      `GATEWAY_URL=https://gateway.corevalue.dev`, real `COREVALUE_API_KEY`) for all 4 required
+      scenarios: PDF-sourced text (amount 129.00/USD, dates, line items 99.00+30.00=129.00, all
+      matching the synthetic source — `HIGH` confidence), CSV-sourced text (amount
+      45.50+12.25=57.75/USD, `USAGE_BASED` correctly inferred, matching source), email-body text
+      (amount 44.00/USD, date matching "July 5, 2026" → `2026-07-05` — matching source), and
+      invalid/unextractable text (correctly threw `AiExtractionError` after 3 attempts, zod
+      validation errors on missing amount/currency/date — no prior "No anthropic provider key"
+      error, confirming the routing fix actually resolves T206/T207's blocker). Ran the full test
+      suite against real local Postgres (147/147 passing, including
+      `invoiceMonitor.test.ts`'s real-DB duplicate-prevention/retry/`FAILED`-recording integration
+      tests) and a live `POST /tasks/ingest-invoices` run against the real Gmail mailbox (0 new
+      emails — mailbox has no unprocessed content, consistent with prior sessions).
+      `ProcessingHistoryEntry` query confirms `FAILED` entries (112 historical, from the blocked
+      period) never produced corresponding `Invoice` rows (3 total, all from earlier successful
+      `PROCESSED` runs) — invalid extractions do not create incorrect invoice records. Reviewed
+      `aiExtractor.ts`/`bedrockExtractor.ts` error-logging call sites: only `err`/`attempt` objects
+      are logged (pino), never request headers or the API key itself. Also found and cleaned up
+      stray SigV4 debug text that had been appended into local `.env` (gitignored, never
+      committed) in an earlier session — cosmetic, not a real credential leak (signature values
+      are single-request-scoped). No live GCP/Cloud Run access is available in this sandbox (see
+      T208 note above), so this verification used the same environment as prior scenarios (real
+      Gmail account, real CoreValue gateway, local Postgres) rather than the deployed Cloud Run
+      service directly; this is the same limitation documented since T043.
 - [x] T208 Configure the daily Cloud Scheduler job via Terraform (`terraform/scheduler.tf`, driven
       by `SCHEDULER_SCHEDULE`/`SCHEDULER_TIME_ZONE` variables) for production, remove the
       duplicate scheduler-creation step from `.github/workflows/deploy.yml` so Terraform is the
@@ -377,7 +406,7 @@ insert them before Phase 7 — production deployment stays last.
       behavior configured (both Cloud Scheduler's `retry_config` and the app's own
       extraction-retry logic fired as designed), and the job is fully Terraform-managed. The
       single email's extraction still fails with the same `"No anthropic provider key
-  available"` CoreValue gateway error already tracked as T207's blocker — expected and out of
+available"` CoreValue gateway error already tracked as T207's blocker — expected and out of
       scope here, since T208 only requires ingestion to _start_ successfully from the scheduled
       request, not for extraction to succeed. Also observed `ProcessingHistoryEntry.evaluatedAt`
       values appear offset by roughly -5:30 from the request's actual UTC timestamp (e.g. a
