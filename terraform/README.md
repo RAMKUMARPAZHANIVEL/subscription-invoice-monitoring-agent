@@ -49,6 +49,16 @@ Provisioned by this configuration (T201/T202/T203/T204 — see
   `var.scheduler_retry_count` / `var.scheduler_attempt_deadline_seconds` (`scheduler.tf`, T208).
   Terraform is the sole owner of this job — `.github/workflows/deploy.yml` no longer creates or
   updates a Cloud Scheduler job.
+- Cloud Monitoring notification channel + alert policies for Cloud Run 5xx responses and Cloud
+  Scheduler ingestion attempt failures (`monitoring.tf`, T210) — see
+  `specs/001-gmail-invoice-ingestion/production-handover.md` for the operational runbook these
+  feed into.
+- GitHub Actions Workload Identity Federation pool/provider (scoped to `var.github_repository`
+  only) and a narrowly-scoped deployer service account for `.github/workflows/deploy.yml`
+  (`ci-cd.tf`, T210). Run `terraform output github_actions_secrets_to_set` for the two GitHub repo
+  secret values (`GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`) — someone with GitHub
+  repo-admin access still has to paste those into the repo's Actions secrets, since no
+  GCP/Terraform credential can do that step.
 
 ## Usage
 

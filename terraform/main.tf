@@ -35,6 +35,10 @@ resource "google_project_service" "required" {
     "storage.googleapis.com",
     "iam.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "monitoring.googleapis.com",
+    "logging.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "sts.googleapis.com",
   ])
 
   project            = var.project_id

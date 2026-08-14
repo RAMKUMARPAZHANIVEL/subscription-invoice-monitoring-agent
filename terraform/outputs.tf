@@ -42,3 +42,16 @@ output "gcs_attachment_bucket_name" {
   description = "Name of the GCS bucket used for invoice attachment storage (GCS_BUCKET_NAME)."
   value       = google_storage_bucket.attachments.name
 }
+
+output "alert_notification_channel_id" {
+  description = "Cloud Monitoring notification channel ID that alerts (Cloud Run 5xx, Cloud Scheduler attempt failures) are sent to (T210)."
+  value       = google_monitoring_notification_channel.email.id
+}
+
+output "github_actions_secrets_to_set" {
+  description = "The two GitHub Actions repo secrets (Settings -> Secrets and variables -> Actions) that unblock Deploy to Cloud Run (T210, ci-cd.tf). Someone with GitHub repo-admin access must paste these in; Terraform/GCP credentials alone cannot set GitHub repo secrets."
+  value = {
+    GCP_WORKLOAD_IDENTITY_PROVIDER = google_iam_workload_identity_pool_provider.github.name
+    GCP_SERVICE_ACCOUNT            = google_service_account.github_deployer.email
+  }
+}

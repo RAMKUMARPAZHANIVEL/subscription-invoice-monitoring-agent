@@ -137,3 +137,15 @@ variable "scheduler_attempt_deadline_seconds" {
   type        = number
   default     = 600
 }
+
+variable "alert_notification_email" {
+  description = "Email address that receives Cloud Monitoring alerts (T210) — Cloud Run 5xx errors and Cloud Scheduler ingestion job attempt failures. Distinct from GMAIL_ADMIN_EMAIL, which is the mailbox the agent monitors for invoices, not an operator contact."
+  type        = string
+  default     = "ramkumar@replicacia.com"
+}
+
+variable "github_repository" {
+  description = "GitHub repository (owner/repo) allowed to impersonate the deployer service account via Workload Identity Federation (T210, ci-cd.tf). Must match the repo .github/workflows/deploy.yml lives in."
+  type        = string
+  default     = "RAMKUMARPAZHANIVEL/subscription-invoice-monitoring-agent"
+}
