@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Anthropic from '@anthropic-ai/sdk';
 import type { Message, MessageCreateParams } from '@anthropic-ai/sdk/resources/messages';
 import { AiExtractionError, extractInvoiceData } from './aiExtractor.js';
+import { env } from '../../config/env.js';
 
 const { mockCreate, bedrockExtractFn } = vi.hoisted(() => ({
   mockCreate: vi.fn(),
@@ -98,7 +99,28 @@ const VALID_INPUT = {
 };
 
 describe('extractInvoiceData', () => {
-  it('routes through the Anthropic-compatible gateway when a CoreValue gateway is configured', async () => {
+  afterEach(() => {
+    env.INVOICE_EXTRACTION_PROVIDER = 'bedrock';
+  });
+
+  it('routes to native Bedrock when provider is bedrock, even when GATEWAY_URL is configured', async () => {
+    bedrockExtractFn.mockReset();
+    bedrockExtractFn.mockResolvedValue(VALID_INPUT);
+    mockCreate.mockReset();
+
+    const result = await extractInvoiceData({
+      vendorName: 'Acme Cloud',
+      sourceText: 'Invoice for $49.00 due 2026-06-01',
+    });
+
+    expect(result).toEqual(VALID_INPUT);
+    expect(bedrockExtractFn).toHaveBeenCalledTimes(1);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('routes through the Anthropic-compatible client when provider is claude, with GATEWAY_URL configured', async () => {
+    env.INVOICE_EXTRACTION_PROVIDER = 'claude';
+    mockCreate.mockReset();
     mockCreate.mockResolvedValue(toolUseMessage(VALID_INPUT));
     bedrockExtractFn.mockReset();
 

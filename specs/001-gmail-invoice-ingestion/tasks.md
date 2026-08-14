@@ -330,6 +330,18 @@ insert them before Phase 7 — production deployment stays last.
       acceptance criteria around correct structured output/persistence can be exercised) until
       whoever administers the CoreValue gateway provisions an Anthropic provider key for this
       account.
+      **Superseded 2026-08-14 (WIZ-81):** The `!env.GATEWAY_URL` guard restored by `00b0b76` was
+      itself the actual root cause diagnosed above, not a correct fix. With `GATEWAY_URL`
+      configured (as production has it), that guard routed `INVOICE_EXTRACTION_PROVIDER=bedrock`
+      through the CoreValue gateway's Anthropic Messages API surface — the same surface returning
+      `"No anthropic provider key available"` — instead of the Bedrock-shaped extractor
+      (`bedrockExtractor.ts`), which authenticates to the same gateway host via a different,
+      Bedrock-specific credential path. `INVOICE_EXTRACTION_PROVIDER` is now the authoritative
+      selector regardless of `GATEWAY_URL` (see `aiExtractor.ts`, `docs/validation-report.md`
+      "Superseded: GATEWAY_URL precedence reversed"). This does not close T207 — the live
+      extraction call against production still needs to be re-verified now that routing actually
+      reaches `bedrockExtractor.ts`; that re-verification is separate follow-up work, not part of
+      WIZ-81.
 - [x] T208 Configure the daily Cloud Scheduler job via Terraform (`terraform/scheduler.tf`, driven
       by `SCHEDULER_SCHEDULE`/`SCHEDULER_TIME_ZONE` variables) for production, remove the
       duplicate scheduler-creation step from `.github/workflows/deploy.yml` so Terraform is the
@@ -365,7 +377,7 @@ insert them before Phase 7 — production deployment stays last.
       behavior configured (both Cloud Scheduler's `retry_config` and the app's own
       extraction-retry logic fired as designed), and the job is fully Terraform-managed. The
       single email's extraction still fails with the same `"No anthropic provider key
-    available"` CoreValue gateway error already tracked as T207's blocker — expected and out of
+  available"` CoreValue gateway error already tracked as T207's blocker — expected and out of
       scope here, since T208 only requires ingestion to _start_ successfully from the scheduled
       request, not for extraction to succeed. Also observed `ProcessingHistoryEntry.evaluatedAt`
       values appear offset by roughly -5:30 from the request's actual UTC timestamp (e.g. a

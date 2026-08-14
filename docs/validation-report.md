@@ -219,3 +219,23 @@ job has still never been (re)provisioned from current `main`.
       remain unvalidated. Needs a human with GitHub repo-secrets admin + GCP IAM access to inspect
       `GCP_WORKLOAD_IDENTITY_PROVIDER` / `GCP_SERVICE_ACCOUNT` and the WIF pool/provider config,
       then re-run the `Deploy to Cloud Run` workflow.
+
+## Superseded: GATEWAY_URL precedence reversed (2026-08-14, WIZ-81)
+
+**"Fix applied (2026-08-10)" item 1 above ("`aiExtractor.ts` GATEWAY_URL precedence — reverted as
+proposed") is no longer the intended behavior.** That decision — and known-issue #5 it relied on —
+assumed a configured `GATEWAY_URL` should make `INVOICE_EXTRACTION_PROVIDER=bedrock` route through
+the CoreValue gateway's Anthropic-compatible Messages API surface rather than the native Bedrock
+extractor. T206/T207 (WIZ-55/WIZ-56) found live evidence this assumption was the actual root cause
+of T207's blocker: that Anthropic-compatible surface returns `"No anthropic provider key
+available"` for this account regardless of a valid `COREVALUE_API_KEY`, because it's a different
+provisioned credential path on the gateway than the Bedrock-shaped one.
+
+`bedrockExtractor.ts` already sends its `InvokeModelCommand`-shaped requests to `GATEWAY_URL`
+(defaulting to the same `https://gateway.corevalue.dev` host) using `COREVALUE_API_KEY` as a
+bearer token — so "both providers call the CoreValue gateway" (the transport-level fact this
+decision was originally protecting) remains true. What changed is that `GATEWAY_URL`'s presence no
+longer selects _which API shape_ (Anthropic Messages vs. Bedrock InvokeModel) is used against that
+host — `INVOICE_EXTRACTION_PROVIDER` alone does. See WIZ-81 for the implementation change
+(`aiExtractor.ts`'s Bedrock-routing condition drops `!env.GATEWAY_URL`) and updated
+`aiExtractor.test.ts` coverage for both provider paths with `GATEWAY_URL` configured.

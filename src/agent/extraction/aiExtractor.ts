@@ -185,11 +185,12 @@ export async function extractInvoiceData(
   input: ExtractInvoiceInput,
   client?: Anthropic,
 ): Promise<ExtractedInvoice> {
-  // A configured GATEWAY_URL means the CoreValue gateway (Anthropic-compatible Messages API
-  // surface) is in front of whichever backend model is configured, so it always takes the
-  // Anthropic SDK path below regardless of INVOICE_EXTRACTION_PROVIDER. Native Bedrock
-  // (Converse API via BedrockRuntimeClient) is only used when calling AWS directly.
-  if (!client && env.INVOICE_EXTRACTION_PROVIDER === 'bedrock' && !env.GATEWAY_URL) {
+  // INVOICE_EXTRACTION_PROVIDER is authoritative for selecting the extraction implementation.
+  // When provider=bedrock, use the Bedrock extractor (bedrockExtractor.ts, InvokeModelCommand
+  // shape) regardless of whether GATEWAY_URL is configured. GATEWAY_URL never overrides provider
+  // selection; it's transport configuration only — bedrockExtractor.ts uses it (defaulting to the
+  // CoreValue gateway) as the endpoint for its own Bedrock-shaped requests.
+  if (!client && env.INVOICE_EXTRACTION_PROVIDER === 'bedrock') {
     const { extractInvoiceDataWithBedrock } = await import('./bedrockExtractor.js');
     return extractInvoiceDataWithBedrock(input);
   }
