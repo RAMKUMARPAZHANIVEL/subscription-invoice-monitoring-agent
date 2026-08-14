@@ -413,9 +413,34 @@ available"` CoreValue gateway error already tracked as T207's blocker — expect
       17:07:36 UTC log line has `evaluatedAt: 2026-08-13T11:37:36.447Z`) — looks like a
       pre-existing timezone-handling issue unrelated to Cloud Scheduler config, not investigated
       further here; worth a follow-up if it matters for T209's validation scenarios.
-- [ ] T209 Run the `quickstart.md` validation scenarios end-to-end against production and record
+- [x] T209 Run the `quickstart.md` validation scenarios end-to-end against production and record
       results in `specs/001-gmail-invoice-ingestion/production-validation.md` (depends on T206,
       T207, T208)
+      **Verified live 2026-08-14 (WIZ-58):** First session with live GCP credentials for this
+      feature. Found and fixed two production defects that had silently blocked every extraction
+      attempt since deployment: (1) `Deploy to Cloud Run` has been failing since 2026-08-10 (no
+      Workload Identity Federation pool exists in the project at all) — the deployed revision was
+      11 commits stale, missing T206 through WIZ-81/T207 entirely; unblocked by manually
+      `docker build`/`push`/`gcloud run deploy`-ing current HEAD (`d0eea0c`), since GitHub
+      repo-secrets access to fix WIF itself isn't available in this sandbox (still needs a human,
+      see production-validation.md). (2) `terraform/main.tf` hardcoded
+      `INVOICE_EXTRACTION_PROVIDER=claude` (not `bedrock`, the value T207 actually verified
+      working) and had no `BEDROCK_MODEL_ID` override, so production fell back to a retired AWS
+      model — both fixed via `terraform apply`. After both fixes, a real scheduler-triggered
+      production run produced this feature's **first-ever live `Invoice` record**
+      (`SIMA Test Vendor`, `$49.99 USD`, PDF+CSV attachments, `HIGH` confidence,
+      `lineItems` summing correctly). Live-verified: PDF/CSV extraction, duplicate-skip (re-run
+      produced `SKIPPED_DUPLICATE`, invoice count stayed at 1), GCS attachment retrieval (byte-read
+      the real PDF from the bucket), scheduler-triggered execution (both runs went through the
+      real Cloud Scheduler job), `GET /invoices`/`GET /invoices/:id`/`GET /processing-history`
+      (incl. `outcome` and `vendor` filters), and no-secrets-in-logs (scanned 500 live log lines).
+      Direct DB query confirmed zero duplicate `Invoice` rows and zero `FAILED`/`RETRYING` entries
+      with a linked `invoiceId` despite 15 total evaluation attempts. Full report:
+      `specs/001-gmail-invoice-ingestion/production-validation.md`. Multiple-invoices and a
+      freshly-injected invalid-invoice scenario remain covered by historical evidence + integration
+      tests only (no mail-send capability in this sandbox, same limitation documented since T043).
+      Temporary IAM `run.invoker` grant used for direct API verification was revoked at session
+      end.
 - [ ] T210 Production acceptance & handover: confirm monitoring/alerting is in place, document the
       operational runbook and rollback steps, and record sign-off in
       `specs/001-gmail-invoice-ingestion/production-handover.md` (depends on T209)

@@ -1,12 +1,21 @@
 locals {
   default_env_vars = {
-    NODE_ENV                    = var.environment == "production" ? "production" : var.environment
-    LOG_LEVEL                   = "info"
-    ATTACHMENT_STORE_DRIVER     = "gcs"
-    INVOICE_EXTRACTION_PROVIDER = "claude"
-    GCP_REGION                  = var.region
-    GOOGLE_CLOUD_PROJECT        = var.project_id
-    GCS_BUCKET_NAME             = google_storage_bucket.attachments.name
+    NODE_ENV                = var.environment == "production" ? "production" : var.environment
+    LOG_LEVEL               = "info"
+    ATTACHMENT_STORE_DRIVER = "gcs"
+    # "claude" routes through the CoreValue gateway's Anthropic Messages API surface, which
+    # returns "No anthropic provider key available" for this account (WIZ-56/T207 finding,
+    # 2026-08-14). "bedrock" routes the same gateway host through its Bedrock-shaped credential
+    # path instead, which is the one actually provisioned and verified working.
+    INVOICE_EXTRACTION_PROVIDER = "bedrock"
+    # src/config/env.ts's BEDROCK_MODEL_ID default (anthropic.claude-3-5-sonnet-20241022-v2:0) has
+    # been retired by AWS ("This model version has reached the end of its life", live production
+    # error found during WIZ-58/T209 validation, 2026-08-14). Override to a currently-serviceable
+    # model.
+    BEDROCK_MODEL_ID     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    GCP_REGION           = var.region
+    GOOGLE_CLOUD_PROJECT = var.project_id
+    GCS_BUCKET_NAME      = google_storage_bucket.attachments.name
   }
 
   plain_env_vars = merge(local.default_env_vars, var.plain_env_vars)
